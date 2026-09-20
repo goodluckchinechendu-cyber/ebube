@@ -1,0 +1,15 @@
+# Serve Android APK downloads with the correct content type + filename.
+# Missing .apk extension after download is a common “parse package” cause.
+<IfModule mod_mime.c>
+  AddType application/vnd.android.package-archive .apk
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.apk$">
+    Header set Content-Type "application/vnd.android.package-archive"
+    Header set Content-Disposition "attachment; filename=\"EbubeConnect.apk\""
+    Header unset Content-Encoding
+  </FilesMatch>
+</IfModule>
+
+Options -Indexes

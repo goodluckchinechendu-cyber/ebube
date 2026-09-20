@@ -1,0 +1,10 @@
+DirectoryIndex index.html index.php
+RewriteEngine On
+
+RewriteRule ^private(/|$) - [F,L]
+RewriteRule ^backend(/|$) - [L]
+RewriteRule ^downloads(/|$) - [L]
+RewriteRule ^\.well-known(/|$) - [L]
+RewriteRule ^agent$ /agent/ [R=301,L]
+RewriteRule ^agent/ - [L]
+RewriteRule ^ /agent/ [R=301,L]

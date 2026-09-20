@@ -1,0 +1,26 @@
+DirectoryIndex index.html index.php
+RewriteEngine On
+
+# Never expose private secrets.
+RewriteRule ^private(/|$) - [F,L]
+
+# Keep API, downloads, Flutter agent, and ACME reachable as-is.
+RewriteRule ^backend(/|$) - [L]
+RewriteRule ^downloads(/|$) - [L]
+RewriteRule ^\.well-known(/|$) - [L]
+
+# All /agent/* content — do not redirect away (avoids loops).
+RewriteRule ^agent/ - [L]
+
+# Build a public host for redirects (never Apache's internal :8080).
+RewriteCond %{HTTP:X-Forwarded-Host} ^(.+)$ [OR]
+RewriteCond %{HTTP_HOST} ^(.+)$
+RewriteRule ^ - [E=EC_HOST:%1]
+RewriteCond %{ENV:EC_HOST} ^([^:]+)
+RewriteRule ^ - [E=EC_HOST:%1]
+
+# /agent → /agent/
+RewriteRule ^agent$ https://%{ENV:EC_HOST}/agent/ [R=301,L,NE]
+
+# Apex and every other path → Flutter app (https, no port)
+RewriteRule ^ https://%{ENV:EC_HOST}/agent/ [R=301,L,NE]

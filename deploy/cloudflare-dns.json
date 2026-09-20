@@ -1,0 +1,55 @@
+{
+  "domain": "ebubeconnect.com",
+  "ssl_mode": "full_strict",
+  "railway": {
+    "apex_cname": "web-production-8da90.up.railway.app",
+    "www_cname": "web-production-8da90.up.railway.app",
+    "verify_apex": {
+      "name": "_railway-verify",
+      "type": "TXT",
+      "content": "railway-verify=eb308a2bfe24b2e660710416a76bb31940d456956dde68c906025575d7e39729"
+    },
+    "verify_www": {
+      "name": "_railway-verify.www",
+      "type": "TXT",
+      "content": "railway-verify=e7e0cfb062c2841a8ba701216ef40c082dfb28236feab06e0416ba19b25ed994"
+    }
+  },
+  "dns_records": [
+    {
+      "type": "CNAME",
+      "name": "@",
+      "content": "web-production-8da90.up.railway.app",
+      "proxied": true,
+      "comment": "Railway web (CNAME flattening)"
+    },
+    {
+      "type": "CNAME",
+      "name": "www",
+      "content": "web-production-8da90.up.railway.app",
+      "proxied": true,
+      "comment": "Railway www"
+    },
+    {
+      "type": "TXT",
+      "name": "_railway-verify",
+      "content": "railway-verify=eb308a2bfe24b2e660710416a76bb31940d456956dde68c906025575d7e39729",
+      "proxied": false,
+      "comment": "Railway domain ownership"
+    },
+    {
+      "type": "TXT",
+      "name": "_railway-verify.www",
+      "content": "railway-verify=e7e0cfb062c2841a8ba701216ef40c082dfb28236feab06e0416ba19b25ed994",
+      "proxied": false,
+      "comment": "Railway www ownership"
+    },
+    {
+      "type": "TXT",
+      "name": "@",
+      "content": "v=spf1 include:amazonses.com include:_spf.resend.com ~all",
+      "proxied": false,
+      "comment": "SPF for Resend"
+    }
+  ]
+}

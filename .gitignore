@@ -1,0 +1,69 @@
+# Secrets & signing
+/private/.env
+/private/flutter.env
+/private/**/*.local
+/private/*.jks
+/private/key.properties
+app/android/key.properties
+**/*.jks
+**/*.keystore
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+.cursor/
+*.iml
+*.swp
+
+# Logs & archives
+error_log
+*.log
+ebubeconnect_live_deployment.zip
+*.zip
+
+# Legacy / unused host copies
+/agent_legacy/
+/cgi-bin/
+
+# Root-level Flutter web dumps (canonical build is app/build/web)
+/main.dart.js
+/flutter.js
+/flutter_bootstrap.js
+/flutter_service_worker.js
+/canvaskit/
+/assets/
+/icons/
+/favicon.ico
+/favicon.png
+/manifest.json
+/version.json
+
+# Flutter / Dart build & tooling
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.pub-cache/
+app/.pub/
+app/build/
+app/**/doc/api/
+app/coverage/
+app/android/.gradle/
+app/android/local.properties
+app/android/app/debug/
+app/android/app/profile/
+app/android/app/release/
+app/ios/Flutter/ephemeral/
+app/ios/Pods/
+app/ios/.symlinks/
+app/linux/
+app/macos/
+app/windows/
+
+# Built APKs (ship via deploy; keep download page)
+/downloads/*.apk
+/downloads/*.idsig
+/downloads/*.aab
+
+# Node (if any)
+node_modules/

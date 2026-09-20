@@ -1,0 +1,61 @@
+# Keep Railway upload small (only what Dockerfile needs).
+.git
+.cursor
+.vscode
+.idea
+**/.DS_Store
+
+# Secrets / local signing
+private/.env
+private/flutter.env
+private/*.jks
+private/key.properties
+
+# Huge local artifacts
+ebubeconnect_live_deployment.zip
+error_log
+agent_legacy
+cgi-bin
+
+# Flutter source (we only need app/build/web)
+app/.dart_tool
+app/.idea
+app/android
+app/ios
+app/linux
+app/macos
+app/windows
+app/test
+app/lib
+app/web
+app/build/app
+app/build/ios
+app/build/macos
+app/build/windows
+app/build/linux
+app/*.iml
+app/pubspec.lock
+app/analysis_options.yaml
+app/README.md
+
+# Root Flutter copies only (app/build/web must still upload for Dockerfile)
+/main.dart.js
+/flutter.js
+/flutter_bootstrap.js
+/flutter_service_worker.js
+/canvaskit
+/assets
+/icons
+/favicon.ico
+/favicon.png
+/manifest.json
+/version.json
+
+# Optional: skip split APKs; keep universal only if present
+downloads/EbubeConnect-arm.apk
+downloads/EbubeConnect-arm64.apk
+
+# Docs / misc
+*.md
+backend/tests
+backend/_quarantine
