@@ -2,6 +2,8 @@ DirectoryIndex index.html index.php
 RewriteEngine On
 
 RewriteRule ^private(/|$) - [F,L]
+RewriteCond %{HTTPS} =on
+RewriteRule ^downloads/(EbubeConnect(-arm64|-arm)?\.apk)$ https://%{HTTP_HOST}/downloads/apks/$1 [R=301,L,NE]
 RewriteRule ^downloads/(EbubeConnect(-arm64|-arm)?\.apk)$ /downloads/apks/$1 [R=301,L,NE]
 RewriteRule ^backend(/|$) - [L]
 RewriteRule ^downloads(/|$) - [L]

@@ -5,6 +5,10 @@ RewriteEngine On
 RewriteRule ^private(/|$) - [F,L]
 
 # Legacy APK URLs (pre-volume) → /downloads/apks/...
+# Prefer https Location when behind Cloudflare so clients do not hit an extra http→https hop.
+RewriteCond %{HTTP:X-Forwarded-Proto} =https [OR]
+RewriteCond %{HTTPS} =on
+RewriteRule ^downloads/(EbubeConnect(-arm64|-arm)?\.apk)$ https://%{HTTP_HOST}/downloads/apks/$1 [R=301,L,NE]
 RewriteRule ^downloads/(EbubeConnect(-arm64|-arm)?\.apk)$ /downloads/apks/$1 [R=301,L,NE]
 
 # Keep API, downloads, Flutter agent, and ACME reachable as-is.
