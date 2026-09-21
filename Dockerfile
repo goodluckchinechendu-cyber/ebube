@@ -43,8 +43,9 @@ COPY docker/htaccess.railway ./.htaccess
 COPY backend ./backend
 COPY downloads ./downloads
 # APK binaries live on a Railway volume mounted here (see scripts/upload_apks.sh).
-RUN mkdir -p ./downloads/apks \
-  && printf '%s\n' 'Place APKs via ./scripts/upload_apks.sh' > ./downloads/apks/README.txt
+# Do not write placeholder files into downloads/apks — the volume mount hides them
+# and an empty volume would otherwise look "populated".
+RUN mkdir -p ./downloads/apks
 
 COPY private/.htaccess ./private/.htaccess
 COPY --from=flutter_web /src/build/web ./agent

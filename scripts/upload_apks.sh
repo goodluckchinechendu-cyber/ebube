@@ -128,7 +128,8 @@ upload_apks() {
   for f in "$APK_DIR"/EbubeConnect*.apk; do
     base="$(basename "$f")"
     echo "  -> /$base ($(du -h "$f" | awk '{print $1}'))"
-    railway volume files --volume "$VOLUME_NAME" upload "$f" "/$base" --overwrite
+    # -v before `files` avoids an interactive volume picker on some CLI versions.
+    railway volume -v "$VOLUME_NAME" files upload "$f" "/$base" --overwrite
   done
 
   echo "Done."

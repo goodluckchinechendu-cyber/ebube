@@ -4,10 +4,25 @@
   AddType application/vnd.android.package-archive .apk
 </IfModule>
 
+RewriteEngine On
+# Legacy paths (pre-volume layout) → /downloads/apks/...
+# Keeps old app builds / bookmarks working after the path move.
+RewriteRule ^(EbubeConnect(-arm64|-arm)?\.apk)$ apks/$1 [R=301,L]
+
 <IfModule mod_headers.c>
-  <FilesMatch "\.apk$">
+  <FilesMatch "^EbubeConnect\.apk$">
     Header set Content-Type "application/vnd.android.package-archive"
     Header set Content-Disposition "attachment; filename=\"EbubeConnect.apk\""
+    Header unset Content-Encoding
+  </FilesMatch>
+  <FilesMatch "^EbubeConnect-arm64\.apk$">
+    Header set Content-Type "application/vnd.android.package-archive"
+    Header set Content-Disposition "attachment; filename=\"EbubeConnect-arm64.apk\""
+    Header unset Content-Encoding
+  </FilesMatch>
+  <FilesMatch "^EbubeConnect-arm\.apk$">
+    Header set Content-Type "application/vnd.android.package-archive"
+    Header set Content-Disposition "attachment; filename=\"EbubeConnect-arm.apk\""
     Header unset Content-Encoding
   </FilesMatch>
 </IfModule>
