@@ -74,9 +74,9 @@ while ($row = $result->fetch_assoc()) {
     $isExternal = $isSuperAdmin && (int) ($row['is_external'] ?? 0) === 1;
     $walletId = '';
     if ($isSuperAdmin) {
-        $walletId = strtoupper(trim((string) ($row['wallet_id'] ?? '')));
-        if ($isExternal && $walletId === '') {
-            $walletId = (string) (user_ensure_wallet_id($mysqli, $uid) ?? '');
+        $walletId = trim((string) ($row['wallet_id'] ?? ''));
+        if ($isExternal && ($walletId === '' || user_wallet_id_is_legacy_format($walletId))) {
+            $walletId = (string) (user_ensure_wallet_id($mysqli, $uid) ?? $walletId);
         }
     }
 

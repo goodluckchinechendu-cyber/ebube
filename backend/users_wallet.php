@@ -32,7 +32,7 @@ if ($action === 'fund' && $walletIdIn !== '') {
     // When a Wallet ID is supplied, always resolve by Wallet ID (ignore conflicting id).
     $find = $mysqli->prepare(
         'SELECT id, COALESCE(is_external, 0) AS is_external
-         FROM users WHERE UPPER(TRIM(wallet_id)) = ? LIMIT 1'
+         FROM users WHERE UPPER(TRIM(wallet_id)) = UPPER(?) LIMIT 1'
     );
     if ($find) {
         $find->bind_param('s', $walletIdIn);
@@ -153,7 +153,7 @@ if ($action === 'fund') {
     }
     $targetRole = (int) ($targetRow['role'] ?? 0);
     $targetIsExternal = (int) ($targetRow['is_external'] ?? 0) === 1;
-    $targetWalletId = strtoupper(trim((string) ($targetRow['wallet_id'] ?? '')));
+    $targetWalletId = trim((string) ($targetRow['wallet_id'] ?? ''));
 
     if ($sessionRole === 2) {
         // Admin may fund self, other Admins, Agents, and Customers — never Super Admins.
@@ -164,7 +164,11 @@ if ($action === 'fund') {
         }
         // External wallets: Admin may ONLY fund via a matching Wallet ID (never by numeric id).
         if ($targetIsExternal) {
-            if (!$fundedViaWalletId || $walletIdIn === '' || $walletIdIn !== $targetWalletId) {
+            if (
+                !$fundedViaWalletId
+                || $walletIdIn === ''
+                || strtoupper($walletIdIn) !== strtoupper($targetWalletId)
+            ) {
                 http_response_code(404);
                 echo json_encode(['success' => false, 'message' => 'User not found']);
                 exit;
@@ -592,6 +596,14 @@ if ($action === 'sync' || $action === 'get' || $action === 'read') {
         exit;
     }
 
+    // Own external account: rotate legacy EC######## IDs on sync so dashboard stays current.
+    if ($id === $sessionId && (int) ($user['is_external'] ?? 0) === 1) {
+        $freshWid = user_ensure_wallet_id($mysqli, $id);
+        if ($freshWid !== null && $freshWid !== '') {
+            $user['wallet_id'] = $freshWid;
+        }
+    }
+
     $payload = [
         'success' => true,
         'message' => 'Wallet synced',
@@ -607,9 +619,9 @@ if ($action === 'sync' || $action === 'get' || $action === 'read') {
     // own account may receive wallet_id only when assigned.
     if ($sessionRole >= 3) {
         $payload['is_external'] = (int) ($user['is_external'] ?? 0) === 1;
-        $payload['wallet_id'] = strtoupper(trim((string) ($user['wallet_id'] ?? '')));
+        $payload['wallet_id'] = trim((string) ($user['wallet_id'] ?? ''));
     } elseif ($id === $sessionId) {
-        $wid = strtoupper(trim((string) ($user['wallet_id'] ?? '')));
+        $wid = trim((string) ($user['wallet_id'] ?? ''));
         if ($wid !== '') {
             $payload['wallet_id'] = $wid;
         }

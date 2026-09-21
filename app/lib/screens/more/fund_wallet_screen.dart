@@ -37,7 +37,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
 
   final _money = NumberFormat.currency(symbol: '₦', decimalDigits: 2);
 
-  String get _walletIdInput => _walletIdCtrl.text.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
+  String get _walletIdInput => _walletIdCtrl.text.trim().replaceAll(RegExp(r'\s+'), '');
 
   double get _availableForProduct {
     if (_showSmobilePool) return _available;
@@ -437,7 +437,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _walletIdCtrl,
-                      textCapitalization: TextCapitalization.characters,
+                      textCapitalization: TextCapitalization.none,
                       onChanged: (_) {
                         if (_walletIdCtrl.text.trim().isNotEmpty && _selected != null) {
                           setState(() => _selected = null);
@@ -446,7 +446,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                         }
                       },
                       decoration: const InputDecoration(
-                        hintText: 'e.g. ECAB12CD34',
+                        hintText: 'e.g. 7k2M-83914X or WMX482917',
                         prefixIcon: Icon(Icons.qr_code_2_outlined),
                       ),
                     ),
@@ -725,7 +725,7 @@ class _FundUser {
       vtu: money(json['vtu_balance']),
       logical: money(json['logical_balance']),
       isExternal: json['is_external'] == true || json['is_external'] == 1,
-      walletId: '${json['wallet_id'] ?? ''}'.trim().toUpperCase(),
+      walletId: '${json['wallet_id'] ?? ''}'.trim(),
     );
   }
 }

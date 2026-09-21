@@ -191,7 +191,7 @@ class AuthService {
           ? data['is_external'] == true || data['is_external'] == 1
           : null,
       walletId: data.containsKey('wallet_id')
-          ? '${data['wallet_id'] ?? ''}'.trim().toUpperCase()
+          ? '${data['wallet_id'] ?? ''}'.trim()
           : null,
     );
     await _session.saveUser(updated);

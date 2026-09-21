@@ -99,7 +99,7 @@ function login_user_payload(array $user): array
 
     $role = (int) ($user['role'] ?? 0);
     $isExternal = (int) ($user['is_external'] ?? 0) === 1;
-    $walletId = strtoupper(trim((string) ($user['wallet_id'] ?? '')));
+    $walletId = trim((string) ($user['wallet_id'] ?? ''));
 
     // Super Admin may see visibility flags. Other roles never receive is_external /
     // internal labels — only a Wallet ID when one is assigned to their own account.

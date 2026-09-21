@@ -128,9 +128,10 @@ if ($action === 'set_visibility') {
     }
 
     $flag = $isExternal ? 1 : 0;
-    $walletId = strtoupper(trim((string) ($row['wallet_id'] ?? '')));
+    $walletId = trim((string) ($row['wallet_id'] ?? ''));
     if ($isExternal) {
-        if ($walletId === '') {
+        // Always issue a fresh varied ID (including replacing legacy EC########).
+        if ($walletId === '' || user_wallet_id_is_legacy_format($walletId)) {
             $walletId = user_generate_wallet_id($mysqli);
         }
         $upd = $mysqli->prepare('UPDATE users SET is_external = ?, wallet_id = ? WHERE id = ?');

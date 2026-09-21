@@ -136,7 +136,7 @@ class AgentUser {
       emailVerified: flag(json['email_verified'], defaultValue: true),
       hasTransactionPin: flag(json['has_transaction_pin']),
       isExternal: flag(json['is_external']),
-      walletId: '${json['wallet_id'] ?? ''}'.trim().toUpperCase(),
+      walletId: '${json['wallet_id'] ?? ''}'.trim(),
     );
   }
 

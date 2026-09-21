@@ -1179,6 +1179,6 @@ class _UserRow {
         registeredBy: (json['registered_by'] as num?)?.toInt() ?? 0,
         registeredByName: '${json['registered_by_name'] ?? ''}',
         isExternal: json['is_external'] == true || json['is_external'] == 1,
-        walletId: '${json['wallet_id'] ?? ''}'.trim().toUpperCase(),
+        walletId: '${json['wallet_id'] ?? ''}'.trim(),
       );
 }

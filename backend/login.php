@@ -114,6 +114,17 @@ try {
     }
 
     $session = ec_create_session($mysqli, (int) $user['id']);
+
+    // Rotate legacy EC######## wallet IDs so the holder sees the new format after login.
+    if ((int) ($user['is_external'] ?? 0) === 1) {
+        require_once __DIR__ . '/user_visibility_util.php';
+        ensure_user_visibility_columns($mysqli);
+        $freshWid = user_ensure_wallet_id($mysqli, (int) $user['id']);
+        if ($freshWid !== null && $freshWid !== '') {
+            $user['wallet_id'] = $freshWid;
+        }
+    }
+
     echo json_encode([
         'success' => true,
         'message' => 'Login successful',
