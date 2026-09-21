@@ -1,16 +1,10 @@
 # Serve Android APK downloads with the correct content type + filename.
 # Missing .apk extension after download is a common “parse package” cause.
+# Legacy /downloads/*.apk → /downloads/apks/* redirects live in docker/htaccess.railway.
 <IfModule mod_mime.c>
   AddType application/vnd.android.package-archive .apk
 </IfModule>
 
-RewriteEngine On
-# Legacy paths (pre-volume layout) → /downloads/apks/...
-# Use an absolute URL path (relative redirects resolved to the filesystem before).
-RewriteRule ^(EbubeConnect(-arm64|-arm)?\.apk)$ /downloads/apks/$1 [R=301,L,NE]
-
-# Headers for files living in this directory only. Variant filenames for
-# /downloads/apks/* are set by downloads/apks/.htaccess (uploaded to the volume).
 <IfModule mod_headers.c>
   <FilesMatch "^EbubeConnect\.apk$">
     Header set Content-Type "application/vnd.android.package-archive"

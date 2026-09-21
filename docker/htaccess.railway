@@ -4,6 +4,9 @@ RewriteEngine On
 # Never expose private secrets.
 RewriteRule ^private(/|$) - [F,L]
 
+# Legacy APK URLs (pre-volume) → /downloads/apks/...
+RewriteRule ^downloads/(EbubeConnect(-arm64|-arm)?\.apk)$ /downloads/apks/$1 [R=301,L,NE]
+
 # Keep API, downloads, Flutter agent, and ACME reachable as-is.
 RewriteRule ^backend(/|$) - [L]
 RewriteRule ^downloads(/|$) - [L]
