@@ -128,13 +128,12 @@ upload_apks() {
   local htaccess="$APK_DIR/.htaccess"
   if [[ -f "$htaccess" ]]; then
     echo "  -> /.htaccess (Content-Disposition rules)"
-    railway volume -v "$VOLUME_NAME" files upload "$htaccess" "/.htaccess" --overwrite
+    railway volume files --volume "$VOLUME_NAME" upload "$htaccess" "/.htaccess" --overwrite
   fi
   for f in "$APK_DIR"/EbubeConnect*.apk; do
     base="$(basename "$f")"
     echo "  -> /$base ($(du -h "$f" | awk '{print $1}'))"
-    # -v before `files` avoids an interactive volume picker on some CLI versions.
-    railway volume -v "$VOLUME_NAME" files upload "$f" "/$base" --overwrite
+    railway volume files --volume "$VOLUME_NAME" upload "$f" "/$base" --overwrite
   done
 
   echo "Done."
