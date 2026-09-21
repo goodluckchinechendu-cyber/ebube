@@ -6,9 +6,11 @@
 
 RewriteEngine On
 # Legacy paths (pre-volume layout) → /downloads/apks/...
-# Keeps old app builds / bookmarks working after the path move.
-RewriteRule ^(EbubeConnect(-arm64|-arm)?\.apk)$ apks/$1 [R=301,L]
+# Use an absolute URL path (relative redirects resolved to the filesystem before).
+RewriteRule ^(EbubeConnect(-arm64|-arm)?\.apk)$ /downloads/apks/$1 [R=301,L,NE]
 
+# Headers for files living in this directory only. Variant filenames for
+# /downloads/apks/* are set by downloads/apks/.htaccess (uploaded to the volume).
 <IfModule mod_headers.c>
   <FilesMatch "^EbubeConnect\.apk$">
     Header set Content-Type "application/vnd.android.package-archive"
