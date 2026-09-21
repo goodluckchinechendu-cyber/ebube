@@ -1,0 +1,26 @@
+# Lives on the Railway volume at /var/www/html/downloads/apks (see scripts/upload_apks.sh).
+# Parent downloads/.htaccess does not reliably set per-file Content-Disposition for
+# files served from this mounted directory.
+<IfModule mod_mime.c>
+  AddType application/vnd.android.package-archive .apk
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "^EbubeConnect\.apk$">
+    Header set Content-Type "application/vnd.android.package-archive"
+    Header set Content-Disposition "attachment; filename=\"EbubeConnect.apk\""
+    Header unset Content-Encoding
+  </FilesMatch>
+  <FilesMatch "^EbubeConnect-arm64\.apk$">
+    Header set Content-Type "application/vnd.android.package-archive"
+    Header set Content-Disposition "attachment; filename=\"EbubeConnect-arm64.apk\""
+    Header unset Content-Encoding
+  </FilesMatch>
+  <FilesMatch "^EbubeConnect-arm\.apk$">
+    Header set Content-Type "application/vnd.android.package-archive"
+    Header set Content-Disposition "attachment; filename=\"EbubeConnect-arm.apk\""
+    Header unset Content-Encoding
+  </FilesMatch>
+</IfModule>
+
+Options -Indexes

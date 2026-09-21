@@ -66,6 +66,7 @@ app/windows/
 /downloads/*.aab
 /downloads/apks/*
 !/downloads/apks/.gitkeep
+!/downloads/apks/.htaccess
 
 # Node (if any)
 node_modules/
