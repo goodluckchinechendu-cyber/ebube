@@ -39,15 +39,27 @@ Production API:
 flutter run --dart-define=API_BASE=https://ebubeconnect.com/backend
 ```
 
-## Deploy (Railway)
+## Deploy (Railway via Git)
 
-Builds Flutter web into `app/build/web` (served as `/agent/`) and uploads the Docker image to Railway:
+**Preferred:** push to GitHub; Railway builds Flutter web inside Docker and deploys.
 
 ```bash
-./scripts/deploy.sh
+git add -A && git commit -m "your message"
+git push origin main
+# or: ./scripts/deploy.sh git
 ```
 
-Optional: `API_BASE=https://ebubeconnect.com/backend RAILWAY_SERVICE=web ./scripts/deploy.sh`
+Repo: `https://github.com/goodluckchinechendu-cyber/ebube.git`
+
+Connect the Railway **web** service to that GitHub repo (Settings → Source → Connect GitHub), branch `main`.
+
+**CLI fallback** (local Flutter build + upload):
+
+```bash
+./scripts/deploy.sh cli
+```
+
+Optional: `API_BASE=https://ebubeconnect.com/backend RAILWAY_SERVICE=web ./scripts/deploy.sh cli`
 
 ## Branding
 

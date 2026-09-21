@@ -1,28 +1,36 @@
+# Git / Docker build context (Railway builds from this).
 .git
 .cursor
 .vscode
+.idea
 **/.DS_Store
+
+# Secrets — never bake into the image
 private/.env
 private/flutter.env
 private/*.jks
 private/key.properties
+app/android/key.properties
+
+# Local junk
 ebubeconnect_live_deployment.zip
 error_log
 agent_legacy
 cgi-bin
+
+# Flutter: keep web source; drop desktop/mobile toolchains for smaller context
 app/.dart_tool
+app/.idea
 app/android
 app/ios
 app/linux
 app/macos
 app/windows
 app/test
-app/lib
-app/web
-app/build/app
-app/build/ios
+app/build
 app/*.iml
-# Root-only Flutter copies (keep app/build/web for COPY ./agent)
+
+# Root-only stale Flutter copies
 /main.dart.js
 /flutter.js
 /flutter_bootstrap.js
@@ -34,8 +42,11 @@ app/*.iml
 /favicon.png
 /manifest.json
 /version.json
-downloads/EbubeConnect-arm.apk
-downloads/EbubeConnect-arm64.apk
-*.md
+
+# APK binaries (download page stubs stay)
+downloads/*.apk
+downloads/*.idsig
+downloads/*.aab
+
 backend/tests
 backend/_quarantine

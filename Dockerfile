@@ -1,4 +1,26 @@
-# EbubeConnect — PHP + Apache for Railway
+# EbubeConnect — multi-stage: Flutter web → PHP/Apache
+# Git push / Railway builds Flutter inside Docker; no local web build required.
+
+# ── Stage 1: Flutter web ────────────────────────────────────────────────────
+FROM ghcr.io/cirruslabs/flutter:stable AS flutter_web
+
+WORKDIR /src
+# Cache pub deps when lock/yaml unchanged.
+COPY app/pubspec.yaml app/pubspec.lock ./
+RUN flutter config --no-analytics \
+  && flutter pub get
+
+COPY app/ ./
+# Platform folders are not needed for web; keep context small via .dockerignore.
+
+ARG API_BASE=https://ebubeconnect.com/backend
+RUN flutter build web --release \
+      --base-href /agent/ \
+      --web-resources-cdn \
+      --dart-define=API_BASE=${API_BASE} \
+  && rm -rf build/web/canvaskit
+
+# ── Stage 2: PHP + Apache runtime ───────────────────────────────────────────
 FROM php:8.3-apache-bookworm
 
 RUN apt-get update \
@@ -21,7 +43,7 @@ COPY docker/htaccess.railway ./.htaccess
 COPY backend ./backend
 COPY downloads ./downloads
 COPY private/.htaccess ./private/.htaccess
-COPY app/build/web ./agent
+COPY --from=flutter_web /src/build/web ./agent
 COPY docker/agent.htaccess ./agent/.htaccess
 
 COPY docker/apache-vhost.conf /etc/apache2/sites-available/000-default.conf

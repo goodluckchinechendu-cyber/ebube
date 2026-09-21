@@ -1,10 +1,40 @@
 #!/usr/bin/env bash
-# Deploy EbubeConnect to Railway (web service).
-# Requires: flutter on PATH (or FLUTTER_BIN), railway CLI logged in.
+# Deploy EbubeConnect.
+#
+# Preferred: Git deploy — commit + push; Railway builds Flutter web in Docker.
+# Fallback: local Flutter build + `railway up` (CLI).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+MODE="${1:-git}"
+API_BASE="${API_BASE:-https://ebubeconnect.com/backend}"
+SERVICE="${RAILWAY_SERVICE:-web}"
+
+if [[ "$MODE" == "git" || "$MODE" == "push" ]]; then
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Not a git repo. Initialize git first."
+    exit 1
+  fi
+  if [[ -z "$(git remote 2>/dev/null)" ]]; then
+    echo "No git remote configured. Add GitHub origin, then: git push -u origin main"
+    exit 1
+  fi
+  BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+  echo "=== Git push ($BRANCH) → Railway builds Dockerfile ==="
+  git push -u origin "$BRANCH"
+  echo "Done. Railway will build Flutter web + PHP from Git."
+  echo "Site: https://ebubeconnect.com/agent/"
+  exit 0
+fi
+
+if [[ "$MODE" != "cli" && "$MODE" != "up" ]]; then
+  echo "Usage: $0 [git|cli]"
+  echo "  git (default) — push to origin; Railway builds"
+  echo "  cli           — local flutter build + railway up"
+  exit 1
+fi
 
 FLUTTER_BIN="${FLUTTER_BIN:-$HOME/Development/flutter/bin}"
 export PATH="$FLUTTER_BIN:$PATH"
@@ -18,19 +48,12 @@ if ! command -v railway >/dev/null 2>&1; then
   exit 1
 fi
 
-API_BASE="${API_BASE:-https://ebubeconnect.com/backend}"
-SERVICE="${RAILWAY_SERVICE:-web}"
-
 echo "=== Flutter web ($API_BASE) ==="
 (
   cd app
-  # CanvasKit via Google CDN (~37MB not shipped in the image) → much faster first paint.
   flutter build web --release --base-href /agent/ \
     --web-resources-cdn \
-    --pwa-strategy=none \
-    --no-wasm-dry-run \
     --dart-define="API_BASE=$API_BASE"
-  # Build still copies canvaskit/; drop it so Docker/Railway upload stays ~7MB.
   rm -rf build/web/canvaskit
   du -sh build/web
 )
