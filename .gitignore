@@ -64,7 +64,7 @@ app/windows/
 /downloads/*.apk
 /downloads/*.idsig
 /downloads/*.aab
-/downloads/apks/
+/downloads/apks/*
 !/downloads/apks/.gitkeep
 
 # Node (if any)
