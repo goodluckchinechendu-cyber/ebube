@@ -60,10 +60,12 @@ app/linux/
 app/macos/
 app/windows/
 
-# Built APKs (ship via deploy; keep download page)
+# Built APKs (upload to Railway volume; keep download page in Git)
 /downloads/*.apk
 /downloads/*.idsig
 /downloads/*.aab
+/downloads/apks/
+!/downloads/apks/.gitkeep
 
 # Node (if any)
 node_modules/

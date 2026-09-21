@@ -43,10 +43,12 @@ app/*.iml
 /manifest.json
 /version.json
 
-# APK binaries (download page stubs stay)
+# APK binaries live on Railway volume (/downloads/apks); page stays in image
 downloads/*.apk
 downloads/*.idsig
 downloads/*.aab
+downloads/apks/**
+!downloads/apks/.gitkeep
 
 backend/tests
 backend/_quarantine

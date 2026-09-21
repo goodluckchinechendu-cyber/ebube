@@ -1,5 +1,6 @@
 # Used by `railway up` CLI uploads only.
 # Prefer Git deploy: push to GitHub and let Railway build the Dockerfile.
+# APKs: ./scripts/upload_apks.sh (Railway volume), not this ignore file.
 .git
 .cursor
 .vscode
@@ -43,6 +44,8 @@ app/*.iml
 downloads/*.apk
 downloads/*.idsig
 downloads/*.aab
+downloads/apks/**
+!downloads/apks/.gitkeep
 
 backend/tests
 backend/_quarantine

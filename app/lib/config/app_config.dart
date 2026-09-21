@@ -8,7 +8,7 @@ class AppConfig {
 
   /// Production Android APK downloads (hosted under /downloads on the live site).
   static const String apkDownloadUrl =
-      'https://ebubeconnect.com/downloads/EbubeConnect.apk';
+      'https://ebubeconnect.com/downloads/apks/EbubeConnect.apk';
   static const String apkDownloadPageUrl =
       'https://ebubeconnect.com/downloads/';
 
