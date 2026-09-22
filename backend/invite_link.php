@@ -1,6 +1,9 @@
 <?php
 /**
  * Invite link for the signed-in user.
+ *
+ * Super Admin may choose Internal vs External (default External) for people
+ * who register through the shared link. Other roles get a plain invite link.
  */
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/schema.php';
@@ -16,6 +19,8 @@ if ($schemaError !== null) {
 
 $sessionUser = ec_require_session($mysqli);
 $sessionId = (int) $sessionUser['id'];
+$sessionRole = (int) ($sessionUser['role'] ?? 0);
+$isSuperAdmin = $sessionRole >= 3;
 
 $code = user_ensure_referral_code($mysqli, $sessionId);
 if ($code === null || $code === '') {
@@ -34,11 +39,28 @@ if ($stmt) {
     $underCount = (int) ($row['c'] ?? 0);
 }
 
+// SA may pass visibility=ext|int (default ext). Others ignore it.
+$visibility = null;
+if ($isSuperAdmin) {
+    $rawVis = strtolower(trim((string) ($_GET['visibility'] ?? $_GET['vis'] ?? 'ext')));
+    if (in_array($rawVis, ['int', 'internal', '0'], true)) {
+        $visibility = 'int';
+    } else {
+        $visibility = 'ext';
+    }
+}
+
+$inviteUrl = referral_invite_url($code, null, $visibility);
+
 echo json_encode([
     'success' => true,
     'referral_code' => $code,
-    'invite_url' => referral_invite_url($code),
+    'invite_url' => $inviteUrl,
+    'is_super_admin' => $isSuperAdmin,
+    'default_visibility' => $isSuperAdmin ? ($visibility ?? 'ext') : null,
     'registered_under_count' => $underCount,
-    'message' => 'Share this link. Anyone who registers through it will be under your account.',
+    'message' => $isSuperAdmin
+        ? 'Share this link. New sign-ups default to external unless you switch to internal.'
+        : 'Share this link. Anyone who registers through it will be under your account.',
 ]);
 $mysqli->close();

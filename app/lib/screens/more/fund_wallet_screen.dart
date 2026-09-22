@@ -23,7 +23,10 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
   bool _loadingUsers = false;
   bool _loadingPool = false;
   bool _funding = false;
+  bool _resolvingWallet = false;
   String? _error;
+  String? _resolvedWalletLabel;
+  String? _resolvedWalletName;
   List<_FundUser> _users = [];
   _FundUser? _selected;
   String _product = 'vtu';
@@ -172,6 +175,51 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
     }).toList();
   }
 
+  Future<void> _resolveWalletId() async {
+    final wid = _walletIdInput;
+    if (wid.isEmpty) {
+      setState(() {
+        _resolvedWalletLabel = null;
+        _resolvedWalletName = null;
+        _resolvingWallet = false;
+      });
+      return;
+    }
+    setState(() => _resolvingWallet = true);
+    try {
+      final res = await _api.post(
+        'users_wallet.php',
+        body: {'action': 'resolve_wallet', 'wallet_id': wid},
+        throwOnFailure: false,
+      );
+      if (!mounted) return;
+      if (res['success'] == true) {
+        setState(() {
+          _resolvedWalletName = '${res['full_name'] ?? ''}'.trim();
+          _resolvedWalletLabel = '${res['display_name'] ?? ''}'.trim();
+          if (_resolvedWalletLabel == null || _resolvedWalletLabel!.isEmpty) {
+            final name = _resolvedWalletName ?? '';
+            _resolvedWalletLabel = name.isEmpty ? 'Wallet $wid' : '$name · Wallet $wid';
+          }
+          _resolvingWallet = false;
+        });
+      } else {
+        setState(() {
+          _resolvedWalletName = null;
+          _resolvedWalletLabel = null;
+          _resolvingWallet = false;
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _resolvedWalletName = null;
+        _resolvedWalletLabel = null;
+        _resolvingWallet = false;
+      });
+    }
+  }
+
   Future<void> _submit() async {
     final actor = AuthScope.of(context).user;
     if (actor == null || !actor.canManageUsers) {
@@ -218,7 +266,11 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
 
     final productLabel = _products.firstWhere((p) => p.$1 == _product).$2;
     final targetLabel = byWalletId
-        ? 'Wallet ID $_walletIdInput'
+        ? (_resolvedWalletLabel?.isNotEmpty == true
+            ? _resolvedWalletLabel!
+            : (_resolvedWalletName?.isNotEmpty == true
+                ? '$_resolvedWalletName · Wallet $_walletIdInput'
+                : 'Wallet ID $_walletIdInput'))
         : _selected!.fullName;
     final ok = await showDialog<bool>(
       context: context,
@@ -444,6 +496,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                         } else {
                           setState(() {});
                         }
+                        _resolveWalletId();
                       },
                       decoration: const InputDecoration(
                         hintText: 'e.g. 7k2M-83914X or WMX482917',
@@ -459,10 +512,17 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                           color: Colors.indigo.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
-                          'Will transfer to Wallet ID: $_walletIdInput',
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                        ),
+                        child: _resolvingWallet
+                            ? const Text(
+                                'Looking up Wallet ID…',
+                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                              )
+                            : Text(
+                                _resolvedWalletLabel?.isNotEmpty == true
+                                    ? 'Will transfer to: $_resolvedWalletLabel'
+                                    : 'Will transfer to Wallet ID: $_walletIdInput',
+                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                              ),
                       ),
                     ],
                     const SizedBox(height: 16),

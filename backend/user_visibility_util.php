@@ -4,8 +4,11 @@
  *
  * Rules:
  * - Super Admin: sees everyone; can set internal/external; sees wallet IDs.
+ * - Super Admin invite links default to external registration (optional vis=int).
  * - Admin / others: never see is_external labels; never see external users in
- *   manage-users lists; may fund external wallets only by wallet_id (no PII).
+ *   manage-users lists; may fund external wallets only by wallet_id.
+ * - When funding/history involves an external wallet by ID, Admin may see
+ *   the account name together with the Wallet ID (no Internal/External label).
  *
  * Wallet IDs intentionally vary in length and pattern so they do not look like
  * sequential product codes from one system.
@@ -259,4 +262,20 @@ function user_row_is_external(array $row): bool
 function user_normalize_wallet_id(string $raw): string
 {
     return preg_replace('/\s+/', '', trim($raw)) ?? '';
+}
+
+/**
+ * Label for an external wallet shown to Admin (name + Wallet ID, no visibility tag).
+ */
+function user_external_display_label(string $fullName, string $walletId): string
+{
+    $name = trim($fullName);
+    $wid = trim($walletId);
+    if ($name !== '' && $wid !== '') {
+        return $name . ' · Wallet ' . $wid;
+    }
+    if ($wid !== '') {
+        return 'Wallet ' . $wid;
+    }
+    return $name !== '' ? $name : 'Wallet';
 }

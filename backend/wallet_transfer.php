@@ -388,15 +388,19 @@ if ($action === 'history') {
         if ($scope === 'all' && $sessionRole >= 2) {
             $direction = 'transfer';
         }
-        // Admin / non-SA: never surface external party names.
+        // Admin / non-SA: show name + Wallet ID for external parties (no visibility tag).
         if ($sessionRole < 3) {
             if ((int) ($row['from_is_external'] ?? 0) === 1) {
-                $wid = strtoupper(trim((string) ($row['from_wallet_id'] ?? '')));
-                $row['from_user_name'] = $wid !== '' ? ('Wallet ' . $wid) : 'Wallet';
+                $row['from_user_name'] = user_external_display_label(
+                    (string) ($row['from_user_name'] ?? ''),
+                    (string) ($row['from_wallet_id'] ?? '')
+                );
             }
             if ((int) ($row['to_is_external'] ?? 0) === 1) {
-                $wid = strtoupper(trim((string) ($row['to_wallet_id'] ?? '')));
-                $row['to_user_name'] = $wid !== '' ? ('Wallet ' . $wid) : 'Wallet';
+                $row['to_user_name'] = user_external_display_label(
+                    (string) ($row['to_user_name'] ?? ''),
+                    (string) ($row['to_wallet_id'] ?? '')
+                );
             }
         }
         $product = (string) $row['wallet_product'];

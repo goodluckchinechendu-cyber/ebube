@@ -23,6 +23,54 @@ $sessionUser = ec_require_session($mysqli);
 $sessionId = (int) $sessionUser['id'];
 $sessionRole = (int) $sessionUser['role'];
 
+if ($action === 'resolve_wallet') {
+    // Admin / SA: look up an external wallet ID and return name + id for confirmation UI.
+    if ($sessionRole < 2) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Admin access required']);
+        exit;
+    }
+    $wid = user_normalize_wallet_id((string) ($data['wallet_id'] ?? ''));
+    if ($wid === '') {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Wallet ID required']);
+        exit;
+    }
+    $find = $mysqli->prepare(
+        'SELECT id, full_name, role, COALESCE(is_external, 0) AS is_external,
+                COALESCE(wallet_id, \'\') AS wallet_id
+         FROM users WHERE UPPER(TRIM(wallet_id)) = UPPER(?) LIMIT 1'
+    );
+    if (!$find) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Database error']);
+        exit;
+    }
+    $find->bind_param('s', $wid);
+    $find->execute();
+    $row = $find->get_result()->fetch_assoc();
+    $find->close();
+    if (
+        !$row
+        || (int) ($row['is_external'] ?? 0) !== 1
+        || ($sessionRole === 2 && (int) ($row['role'] ?? 0) >= 3)
+    ) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'message' => 'Wallet ID not found']);
+        exit;
+    }
+    $fullName = (string) ($row['full_name'] ?? '');
+    $walletId = trim((string) ($row['wallet_id'] ?? ''));
+    echo json_encode([
+        'success' => true,
+        'full_name' => $fullName,
+        'wallet_id' => $walletId,
+        'display_name' => user_external_display_label($fullName, $walletId),
+    ]);
+    $mysqli->close();
+    exit;
+}
+
 // Resolve target for fund: Admin must use wallet_id alone for externals.
 $walletIdIn = user_normalize_wallet_id((string) ($data['wallet_id'] ?? ''));
 $id = isset($data['id']) ? (int) $data['id'] : 0;
@@ -180,10 +228,10 @@ if ($action === 'fund') {
         }
     }
 
-    // Display label: never expose external identity to Admin.
+    // Display label: Admin sees name + Wallet ID for externals (no Internal/External tag).
     $targetDisplayName = (string) ($targetRow['full_name'] ?? 'User');
     if ($sessionRole < 3 && $targetIsExternal) {
-        $targetDisplayName = $targetWalletId !== '' ? ('Wallet ' . $targetWalletId) : 'Wallet';
+        $targetDisplayName = user_external_display_label($targetDisplayName, $targetWalletId);
     }
 
     // Admin funding anyone (self, other Admins, Agents, Customers) = transfer from

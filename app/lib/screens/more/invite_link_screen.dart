@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../config/theme.dart';
 import '../../services/api_client.dart';
+import '../../state/auth_controller.dart';
 
 class InviteLinkScreen extends StatefulWidget {
   const InviteLinkScreen({super.key});
@@ -20,6 +21,10 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
   String? _url;
   String? _code;
   int _underCount = 0;
+  /// Super Admin only: default external for invitees.
+  bool _registerAsExternal = true;
+
+  bool get _isSuperAdmin => AuthScope.of(context).user?.isSuperAdmin == true;
 
   @override
   void initState() {
@@ -33,12 +38,21 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
       _error = null;
     });
     try {
-      final data = await _api.get('invite_link.php');
+      final vis = _registerAsExternal ? 'ext' : 'int';
+      final isSa = AuthScope.of(context).user?.isSuperAdmin == true;
+      final path = isSa ? 'invite_link.php?visibility=$vis' : 'invite_link.php';
+      final data = await _api.get(path);
       if (!mounted) return;
       setState(() {
         _url = '${data['invite_url'] ?? ''}';
         _code = '${data['referral_code'] ?? ''}';
         _underCount = (data['registered_under_count'] as num?)?.toInt() ?? 0;
+        final dv = '${data['default_visibility'] ?? ''}'.toLowerCase();
+        if (dv == 'int' || dv == 'internal') {
+          _registerAsExternal = false;
+        } else if (dv == 'ext' || dv == 'external') {
+          _registerAsExternal = true;
+        }
         _loading = false;
       });
     } catch (e) {
@@ -48,6 +62,12 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _onVisibilityChanged(bool external) async {
+    if (!_isSuperAdmin) return;
+    setState(() => _registerAsExternal = external);
+    await _load();
   }
 
   Future<void> _copy() async {
@@ -78,6 +98,7 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isSa = AuthScope.of(context).user?.isSuperAdmin == true;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Invite Link'),
@@ -104,10 +125,35 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
               : ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
-                    const Text(
-                      'Share this link. Anyone who opens it and registers will be under your account.',
-                      style: TextStyle(color: EcColors.muted, height: 1.4),
+                    Text(
+                      isSa
+                          ? 'Share this link. Choose whether new sign-ups under you are external (default) or internal.'
+                          : 'Share this link. Anyone who opens it and registers will be under your account.',
+                      style: const TextStyle(color: EcColors.muted, height: 1.4),
                     ),
+                    if (isSa) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Register invitees as',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment(value: true, label: Text('External')),
+                          ButtonSegment(value: false, label: Text('Internal')),
+                        ],
+                        selected: {_registerAsExternal},
+                        onSelectionChanged: (s) => _onVisibilityChanged(s.first),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _registerAsExternal
+                            ? 'External users stay hidden from Admin lists and get a Wallet ID.'
+                            : 'Internal users appear under you for Admin to manage.',
+                        style: const TextStyle(fontSize: 12, color: EcColors.muted, height: 1.35),
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     Container(
                       padding: const EdgeInsets.all(16),

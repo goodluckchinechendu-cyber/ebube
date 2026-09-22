@@ -3,6 +3,7 @@ require_once 'config.php';
 require_once 'schema.php';
 require_once 'mysqli_helpers.php';
 require_once __DIR__ . '/session_auth.php';
+require_once __DIR__ . '/user_visibility_util.php';
 
 $schemaError = ensure_app_tables($mysqli);
 if ($schemaError !== null) {
@@ -93,12 +94,8 @@ function funding_row_to_array(array $row, int $viewerRole = 3): array
 
     $customerName = (string) ($row['user_name'] ?? '');
     if ($viewerRole < 3 && (int) ($row['wallet_is_external'] ?? 0) === 1) {
-        $wid = strtoupper(trim((string) ($row['wallet_wallet_id'] ?? '')));
-        if ($wid !== '') {
-            $customerName = 'Wallet ' . $wid;
-        } elseif (stripos($customerName, 'Wallet ') !== 0) {
-            $customerName = 'Wallet';
-        }
+        $wid = trim((string) ($row['wallet_wallet_id'] ?? ''));
+        $customerName = user_external_display_label($customerName, $wid);
     }
 
     return [

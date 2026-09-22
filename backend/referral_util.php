@@ -134,8 +134,9 @@ function user_can_wallet_transfer_to(array $from, array $to): bool
 
 /**
  * Public invite registration URL for a referral code.
+ * $visibility: null (omit), 'ext', or 'int' — Super Admin invite links use this.
  */
-function referral_invite_url(string $code, ?string $baseOrigin = null): string
+function referral_invite_url(string $code, ?string $baseOrigin = null, ?string $visibility = null): string
 {
     $code = strtoupper(trim($code));
     $origin = $baseOrigin;
@@ -151,7 +152,14 @@ function referral_invite_url(string $code, ?string $baseOrigin = null): string
         $origin = ($https ? 'https' : 'http') . '://' . $host;
     }
     $origin = rtrim($origin, '/');
-    return $origin . '/agent/?ref=' . rawurlencode($code);
+    $url = $origin . '/agent/?ref=' . rawurlencode($code);
+    $vis = strtolower(trim((string) $visibility));
+    if ($vis === 'ext' || $vis === 'external') {
+        $url .= '&vis=ext';
+    } elseif ($vis === 'int' || $vis === 'internal') {
+        $url .= '&vis=int';
+    }
+    return $url;
 }
 
 function hierarchy_phone_digits(string $phone): string

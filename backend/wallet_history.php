@@ -6,6 +6,7 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/session_auth.php';
+require_once __DIR__ . '/user_visibility_util.php';
 
 $schemaError = ensure_app_tables($mysqli);
 if ($schemaError !== null) {
@@ -27,19 +28,14 @@ $window = min(400, max($perPage * $page + $perPage, 80));
 $entries = [];
 
 /**
- * Display label for an external wallet when the viewer must not see PII.
+ * Display label for an external wallet (name + Wallet ID for Admin viewers).
  */
 function wh_external_label(array $row, string $nameKey, string $walletKey, string $fallback): string
 {
-    $walletId = strtoupper(trim((string) ($row[$walletKey] ?? '')));
-    if ($walletId !== '') {
-        return 'Wallet ' . $walletId;
-    }
-    $existing = trim((string) ($row[$nameKey] ?? ''));
-    if ($existing !== '' && stripos($existing, 'Wallet ') === 0) {
-        return $existing;
-    }
-    return $fallback;
+    $name = trim((string) ($row[$nameKey] ?? ''));
+    $walletId = trim((string) ($row[$walletKey] ?? ''));
+    $label = user_external_display_label($name, $walletId);
+    return $label !== 'Wallet' ? $label : $fallback;
 }
 
 // Funding received (credit) — exclude Admin transfer-out mirror rows.

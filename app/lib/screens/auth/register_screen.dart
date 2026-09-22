@@ -64,6 +64,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (ref != null && ref.isNotEmpty) {
         body['referral_code'] = ref;
       }
+      final vis = await ReferralStore.loadVisibility();
+      if (vis != null && vis.isNotEmpty) {
+        body['visibility'] = vis;
+      }
       final challenge = await AuthScope.of(context).register(body);
       await ReferralStore.clear();
       if (!mounted) return;

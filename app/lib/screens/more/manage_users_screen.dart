@@ -365,17 +365,22 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   '${filtered.length} user${filtered.length == 1 ? '' : 's'}',
                   style: const TextStyle(fontSize: 12, color: EcColors.muted, fontWeight: FontWeight.w600),
                 ),
-                Text(
-                  actor?.isSuperAdmin == true
-                      ? 'Tap a user to edit details'
-                      : 'Admin: edit Agents & Customers',
-                  style: const TextStyle(fontSize: 11, color: EcColors.muted),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    actor?.isSuperAdmin == true
+                        ? 'Tap a user to edit details'
+                        : 'Admin: edit Agents & Customers',
+                    textAlign: TextAlign.end,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: EcColors.muted),
+                  ),
                 ),
               ],
             ),
@@ -416,7 +421,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                             ),
                           )
                         : ListView.separated(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
                             itemCount: filtered.length,
                             separatorBuilder: (_, index) => const SizedBox(height: 8),
                             itemBuilder: (context, i) {
@@ -859,74 +866,73 @@ class _UserCard extends StatelessWidget {
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: canEdit ? onTap : null,
-                    child: Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 360;
+            final identity = InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: canEdit ? onTap : null,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: _roleColor(user.role).withValues(alpha: 0.15),
+                    child: Text(
+                      user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : '?',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: _roleColor(user.role)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          radius: 22,
-                          backgroundColor: _roleColor(user.role).withValues(alpha: 0.15),
-                          child: Text(
-                            user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : '?',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: _roleColor(user.role)),
-                          ),
+                        Text(
+                          user.fullName,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                user.fullName,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                user.email,
-                                style: const TextStyle(fontSize: 11, color: EcColors.muted),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                user.phone,
-                                style: const TextStyle(fontSize: 11, color: EcColors.muted),
-                              ),
-                              if (user.registeredByName.isNotEmpty)
-                                Text(
-                                  'Under: ${user.registeredByName}',
-                                  style: const TextStyle(fontSize: 11, color: EcColors.muted),
-                                ),
-                              if (isSuperAdmin && user.isExternal && user.walletId.isNotEmpty)
-                                Text(
-                                  'Wallet ID: ${user.walletId}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.indigo,
-                                  ),
-                                ),
-                              if (canEdit)
-                                const Text(
-                                  'Tap to edit details',
-                                  style: TextStyle(fontSize: 11, color: EcColors.primaryDark),
-                                ),
-                            ],
-                          ),
+                        const SizedBox(height: 2),
+                        Text(
+                          user.email,
+                          style: const TextStyle(fontSize: 11, color: EcColors.muted),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        Text(
+                          user.phone,
+                          style: const TextStyle(fontSize: 11, color: EcColors.muted),
+                        ),
+                        if (user.registeredByName.isNotEmpty)
+                          Text(
+                            'Under: ${user.registeredByName}',
+                            style: const TextStyle(fontSize: 11, color: EcColors.muted),
+                          ),
+                        if (isSuperAdmin && user.isExternal && user.walletId.isNotEmpty)
+                          Text(
+                            'Wallet ID: ${user.walletId}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.indigo,
+                            ),
+                          ),
+                        if (canEdit)
+                          const Text(
+                            'Tap to edit details',
+                            style: TextStyle(fontSize: 11, color: EcColors.primaryDark),
+                          ),
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 4),
+                ],
+              ),
+            );
+
+            final actions = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 if (canEdit)
                   _RoleSelector(
                     currentRole: user.role,
@@ -966,32 +972,76 @@ class _UserCard extends StatelessWidget {
                   ),
                 ],
               ],
-            ),
-            if (isSuperAdmin) ...[
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(value: false, label: Text('Internal')),
-                        ButtonSegment(value: true, label: Text('External')),
-                      ],
-                      selected: {user.isExternal},
-                      onSelectionChanged: (s) {
-                        final next = s.first;
-                        if (next != user.isExternal) onSetExternal(next);
-                      },
-                      style: const ButtonStyle(
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
+            );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (narrow) ...[
+                  identity,
+                  const SizedBox(height: 10),
+                  actions,
+                ] else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: identity),
+                      const SizedBox(width: 4),
+                      actions,
+                    ],
+                  ),
+                if (isSuperAdmin) ...[
+                  const SizedBox(height: 10),
+                  LayoutBuilder(
+                    builder: (context, c) {
+                      if (c.maxWidth < 300) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            OutlinedButton(
+                              onPressed: user.isExternal ? () => onSetExternal(false) : null,
+                              child: Text(
+                                'Internal',
+                                style: TextStyle(
+                                  fontWeight: user.isExternal ? FontWeight.w600 : FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            OutlinedButton(
+                              onPressed: user.isExternal ? null : () => onSetExternal(true),
+                              style: OutlinedButton.styleFrom(foregroundColor: Colors.indigo),
+                              child: Text(
+                                'External',
+                                style: TextStyle(
+                                  fontWeight: user.isExternal ? FontWeight.w800 : FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment(value: false, label: Text('Internal')),
+                          ButtonSegment(value: true, label: Text('External')),
+                        ],
+                        selected: {user.isExternal},
+                        onSelectionChanged: (s) {
+                          final next = s.first;
+                          if (next != user.isExternal) onSetExternal(next);
+                        },
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      );
+                    },
                   ),
                 ],
-              ),
-            ],
-          ],
+              ],
+            );
+          },
         ),
       ),
     );

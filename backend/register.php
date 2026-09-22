@@ -4,6 +4,7 @@ require_once 'auth_util.php';
 require_once 'schema.php';
 require_once __DIR__ . '/email_verify_util.php';
 require_once __DIR__ . '/referral_util.php';
+require_once __DIR__ . '/user_visibility_util.php';
 
 $schemaError = ensure_app_tables($mysqli);
 if ($schemaError !== null) {
@@ -125,6 +126,38 @@ if (!$insert_stmt->execute()) {
 
 $userId = (int) $insert_stmt->insert_id;
 $insert_stmt->close();
+
+// Super Admin invites: register as external by default (vis=int opts out).
+// Only applies when registration used an invite referral code (not CRM phone match alone).
+$registeredAsExternal = false;
+$issuedWalletId = '';
+if ($registeredBy !== null && $registeredBy > 0 && $refCode !== '') {
+    $inv = $mysqli->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
+    if ($inv) {
+        $inv->bind_param('i', $registeredBy);
+        $inv->execute();
+        $invRow = $inv->get_result()->fetch_assoc();
+        $inv->close();
+        if ($invRow && (int) ($invRow['role'] ?? 0) >= 3) {
+            $visRaw = strtolower(trim((string) ($data['visibility'] ?? $data['vis'] ?? 'ext')));
+            $wantInternal = in_array($visRaw, ['int', 'internal', '0', 'false'], true);
+            if (!$wantInternal) {
+                ensure_user_visibility_columns($mysqli);
+                $issuedWalletId = user_generate_wallet_id($mysqli);
+                $visUpd = $mysqli->prepare(
+                    'UPDATE users SET is_external = 1, wallet_id = ? WHERE id = ?'
+                );
+                if ($visUpd) {
+                    $visUpd->bind_param('si', $issuedWalletId, $userId);
+                    if ($visUpd->execute()) {
+                        $registeredAsExternal = true;
+                    }
+                    $visUpd->close();
+                }
+            }
+        }
+    }
+}
 
 // Ensure new account has its own invite code.
 user_ensure_referral_code($mysqli, $userId);
