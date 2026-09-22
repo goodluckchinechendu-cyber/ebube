@@ -38,12 +38,15 @@ $result = smobile_vtu_request('GET', '/v1/plans', null, $query);
 // SMobile returns `plans` as a network-keyed object: {"1":[...], "2":[...]}
 // and usually also a flat `plan_list`. Ensure both shapes are usable.
 $body = is_array($result['body'] ?? null) ? $result['body'] : [];
+$httpCode = (int) ($result['http_code'] ?? 0);
 $flat = smobile_vtu_flatten_plans($body, $network !== '' ? $network : null, $networkId !== '' ? $networkId : null);
 $body['plan_list'] = $flat;
 $body['plans'] = $flat;
-$body['success'] = array_key_exists('success', $body) ? (bool) $body['success'] : true;
+if (!array_key_exists('success', $body)) {
+    $body['success'] = $httpCode >= 200 && $httpCode < 400;
+}
 if (!isset($body['response_code'])) {
-    $body['response_code'] = (int) ($result['http_code'] ?? 200);
+    $body['response_code'] = $httpCode > 0 ? $httpCode : 200;
 }
 $result['body'] = $body;
 

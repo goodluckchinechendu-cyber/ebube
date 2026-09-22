@@ -129,13 +129,13 @@ if (!$stmt->execute()) {
 $stmt->close();
 
 // Settle local injected-wallet holds when provider reaches a final status.
-$statusLower = strtolower($status);
-$info = smobile_vtu_classify_status($statusLower, null, null, $reference !== '');
+$info = smobile_vtu_status_info($payload, null, $reference !== '');
+$class = $info['class'];
 $holdNote = null;
 if ($reference !== '') {
-    if ($info === 'success') {
+    if ($info['success']) {
         $holdNote = vtu_hold_complete($mysqli, $reference) ? 'hold_completed' : 'hold_complete_skipped';
-    } elseif ($info === 'failed') {
+    } elseif ($info['failed']) {
         $holdNote = vtu_hold_refund($mysqli, $reference) ? 'hold_refunded' : 'hold_refund_skipped';
     }
 }
@@ -145,7 +145,7 @@ echo json_encode([
     'message' => 'Webhook received',
     'event' => $event,
     'reference' => $reference,
-    'status' => $status,
+    'status' => $status !== '' ? $status : $class,
     'hold' => $holdNote,
 ]);
 

@@ -272,13 +272,15 @@ function smobile_vtu_classify_status(
         if ($successFlag === true) {
             return 'success';
         }
+        // Explicit provider failure must win over "has a reference" — many failed
+        // purchases still return a reference with success:false and no status.
+        if ($successFlag === false && $httpCode !== 202) {
+            return 'failed';
+        }
         if ($httpCode === 202 || $hasReference) {
             return 'processing';
         }
-        if ($successFlag === false) {
-            return 'failed';
-        }
-        return $hasReference ? 'processing' : 'failed';
+        return 'failed';
     }
 
     // Non-empty but unrecognized: keep as processing so we do not contradict SMobile.

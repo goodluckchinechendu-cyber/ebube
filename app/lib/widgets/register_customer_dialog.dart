@@ -81,6 +81,7 @@ class _RegisterCustomerDialogState extends State<_RegisterCustomerDialog> {
     }
 
     setState(() => _saving = true);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       if (_isSa) {
         await _api.post('/users_create.php', body: {
@@ -107,7 +108,7 @@ class _RegisterCustomerDialogState extends State<_RegisterCustomerDialog> {
       }
       if (!mounted) return;
       Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             _isSa
@@ -120,7 +121,7 @@ class _RegisterCustomerDialogState extends State<_RegisterCustomerDialog> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Failed to save: $e')),
       );
     } finally {

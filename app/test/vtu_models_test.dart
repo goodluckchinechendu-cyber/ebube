@@ -63,6 +63,18 @@ void main() {
       expect(r.status, 'processing');
     });
 
+    test('success false with reference and no status is failed', () {
+      final r = VtuResponse.fromJson({
+        'response_code': 400,
+        'success': false,
+        'message': 'Insufficient balance',
+        'reference': 'SM-fail-ref',
+      });
+      expect(r.isFailed, isTrue);
+      expect(r.isProcessing, isFalse);
+      expect(r.status, 'failed');
+    });
+
     test('in_progress is processing', () {
       final r = VtuResponse.fromJson({
         'success': false,

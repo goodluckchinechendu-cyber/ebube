@@ -243,8 +243,10 @@ class VtuResponse {
       status = statusRaw.replaceAll(RegExp(r'[\s-]'), '_');
     } else if (flaggedSuccess) {
       status = 'success';
+    } else if (json['success'] == false && responseCode != 202) {
+      // Failed purchase responses often include a reference but no status.
+      status = 'failed';
     } else if (responseCode == 202 || hasRef) {
-      // HTTP 202 or a live provider reference without a final status → still processing.
       status = 'processing';
     } else {
       status = 'failed';
