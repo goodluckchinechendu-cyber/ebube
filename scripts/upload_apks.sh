@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Build APKs locally (optional) and upload them to the Railway downloads volume.
+# Build one release APK locally (optional) and upload it to the Railway downloads volume.
 # Web stays on Git deploy; APKs are NOT built on Railway and are NOT in the Docker image.
 #
 # Usage:
-#   ./scripts/upload_apks.sh              # upload existing files in downloads/apks/
-#   ./scripts/upload_apks.sh build        # flutter build apk(s), then upload
+#   ./scripts/upload_apks.sh              # upload EbubeConnect.apk from downloads/apks/
+#   ./scripts/upload_apks.sh build        # flutter build apk, then upload
 #   ./scripts/upload_apks.sh upload       # upload only (same as default)
 set -euo pipefail
 
@@ -15,6 +15,7 @@ MODE="${1:-upload}"
 API_BASE="${API_BASE:-https://ebubeconnect.com/backend}"
 VOLUME_NAME="${RAILWAY_APK_VOLUME:-web-downloads-apks}"
 APK_DIR="$ROOT/downloads/apks"
+APK_NAME="EbubeConnect.apk"
 MOUNT_PATH="/var/www/html/downloads/apks"
 SERVICE="${RAILWAY_SERVICE:-web}"
 PROJECT_ID="${RAILWAY_PROJECT_ID:-273654ef-2d18-4889-9626-5b645a3b4f89}"
@@ -80,78 +81,76 @@ ensure_volume() {
   sleep 60
 }
 
-build_apks() {
+build_apk() {
   if ! command -v flutter >/dev/null 2>&1; then
     echo "flutter not found. Set FLUTTER_BIN or add Flutter to PATH."
     exit 1
   fi
 
-  echo "=== Flutter release APKs ($API_BASE) ==="
+  echo "=== Flutter release APK ($API_BASE) ==="
   (
     cd "$ROOT/app"
     flutter build apk --release --dart-define="API_BASE=$API_BASE"
-    flutter build apk --release --split-per-abi --dart-define="API_BASE=$API_BASE"
   )
 
   local out="$ROOT/app/build/app/outputs/flutter-apk"
-  cp -f "$out/app-release.apk" "$APK_DIR/EbubeConnect.apk"
-  cp -f "$out/app-arm64-v8a-release.apk" "$APK_DIR/EbubeConnect-arm64.apk"
-  cp -f "$out/app-armeabi-v7a-release.apk" "$APK_DIR/EbubeConnect-arm.apk"
-  du -sh "$APK_DIR"/EbubeConnect*.apk
+  cp -f "$out/app-release.apk" "$APK_DIR/$APK_NAME"
+  # Drop any leftover split APKs so only one file is published.
+  rm -f "$APK_DIR"/EbubeConnect-arm*.apk
+  du -sh "$APK_DIR/$APK_NAME"
 }
 
 seed_from_legacy_downloads() {
-  if compgen -G "$APK_DIR/EbubeConnect*.apk" >/dev/null; then
+  if [[ -f "$APK_DIR/$APK_NAME" ]]; then
     return 0
   fi
-  if [[ -f "$ROOT/downloads/EbubeConnect.apk" ]]; then
-    echo "Seeding $APK_DIR from downloads/*.apk"
-    cp -f "$ROOT/downloads/EbubeConnect.apk" "$APK_DIR/" 2>/dev/null || true
-    cp -f "$ROOT/downloads/EbubeConnect-arm64.apk" "$APK_DIR/" 2>/dev/null || true
-    cp -f "$ROOT/downloads/EbubeConnect-arm.apk" "$APK_DIR/" 2>/dev/null || true
+  if [[ -f "$ROOT/downloads/$APK_NAME" ]]; then
+    echo "Seeding $APK_DIR from downloads/$APK_NAME"
+    cp -f "$ROOT/downloads/$APK_NAME" "$APK_DIR/"
   fi
 }
 
-upload_apks() {
+upload_apk() {
   need_railway
   ensure_volume
   seed_from_legacy_downloads
 
-  if ! compgen -G "$APK_DIR/EbubeConnect*.apk" >/dev/null; then
-    echo "No APKs in $APK_DIR"
+  if [[ ! -f "$APK_DIR/$APK_NAME" ]]; then
+    echo "No $APK_NAME in $APK_DIR"
     echo "Run: ./scripts/upload_apks.sh build"
     exit 1
   fi
 
-  echo "=== Uploading APKs to volume $VOLUME_NAME ==="
-  local f base
+  echo "=== Uploading $APK_NAME to volume $VOLUME_NAME ==="
   local htaccess="$APK_DIR/.htaccess"
   if [[ -f "$htaccess" ]]; then
     echo "  -> /.htaccess (Content-Disposition rules)"
     railway volume files --volume "$VOLUME_NAME" upload "$htaccess" "/.htaccess" --overwrite
   fi
-  for f in "$APK_DIR"/EbubeConnect*.apk; do
-    base="$(basename "$f")"
-    echo "  -> /$base ($(du -h "$f" | awk '{print $1}'))"
-    railway volume files --volume "$VOLUME_NAME" upload "$f" "/$base" --overwrite
+  echo "  -> /$APK_NAME ($(du -h "$APK_DIR/$APK_NAME" | awk '{print $1}'))"
+  railway volume files --volume "$VOLUME_NAME" upload "$APK_DIR/$APK_NAME" "/$APK_NAME" --overwrite
+
+  # Remove old split APKs from the volume if present.
+  for stale in EbubeConnect-arm64.apk EbubeConnect-arm.apk; do
+    railway volume files --volume "$VOLUME_NAME" delete "/$stale" --yes >/dev/null 2>&1 || true
   done
 
   echo "Done."
   echo "  Page: https://ebubeconnect.com/downloads/"
-  echo "  Fat:  https://ebubeconnect.com/downloads/apks/EbubeConnect.apk"
+  echo "  APK:  https://ebubeconnect.com/downloads/apks/$APK_NAME"
 }
 
 case "$MODE" in
   build|all)
-    build_apks
-    upload_apks
+    build_apk
+    upload_apk
     ;;
   upload|push)
-    upload_apks
+    upload_apk
     ;;
   *)
     echo "Usage: $0 [upload|build]"
-    echo "  upload (default) — upload downloads/apks/*.apk to Railway volume"
+    echo "  upload (default) — upload downloads/apks/$APK_NAME to Railway volume"
     echo "  build            — flutter build apk locally, then upload"
     exit 1
     ;;

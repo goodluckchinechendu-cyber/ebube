@@ -11,16 +11,6 @@
     Header set Content-Disposition "attachment; filename=\"EbubeConnect.apk\""
     Header unset Content-Encoding
   </FilesMatch>
-  <FilesMatch "^EbubeConnect-arm64\.apk$">
-    Header set Content-Type "application/vnd.android.package-archive"
-    Header set Content-Disposition "attachment; filename=\"EbubeConnect-arm64.apk\""
-    Header unset Content-Encoding
-  </FilesMatch>
-  <FilesMatch "^EbubeConnect-arm\.apk$">
-    Header set Content-Type "application/vnd.android.package-archive"
-    Header set Content-Disposition "attachment; filename=\"EbubeConnect-arm.apk\""
-    Header unset Content-Encoding
-  </FilesMatch>
 </IfModule>
 
 Options -Indexes

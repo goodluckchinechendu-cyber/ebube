@@ -50,11 +50,11 @@ git push origin main
 
 Repo: `https://github.com/goodluckchinechendu-cyber/ebube.git`
 
-**Android APKs:** build on your machine, then upload to the Railway volume (not built on Railway).
+**Android APK:** build one release APK on your machine, then upload to the Railway volume (not built on Railway).
 
 ```bash
-./scripts/upload_apks.sh build    # flutter build + upload
-# or, if APKs already sit in downloads/apks/:
+./scripts/upload_apks.sh build    # flutter build + upload EbubeConnect.apk
+# or, if the APK already sits in downloads/apks/:
 ./scripts/upload_apks.sh upload
 ```
 
