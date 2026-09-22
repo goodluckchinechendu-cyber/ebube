@@ -81,8 +81,11 @@ if ($action === 'recipients') {
     if ($q !== '' && mb_strlen($q) >= 1) {
         $like = '%' . $mysqli->real_escape_string($q) . '%';
         // Scope by role to keep lists small.
-        if ($sessionRole >= 3) {
+                    if ($sessionRole >= 3) {
+            // Super Admin may find anyone (incl. externals by wallet_id).
             $sql = "SELECT id, full_name, email, phone, role, COALESCE(registered_by, 0) AS registered_by,
+                           COALESCE(is_external, 0) AS is_external,
+                           COALESCE(wallet_id, '') AS wallet_id,
                            COALESCE(vtu_balance,0) AS vtu_balance,
                            COALESCE(momo_balance,0) AS momo_balance,
                            COALESCE(logical_balance,0) AS logical_balance
@@ -93,7 +96,9 @@ if ($action === 'recipients') {
             $stmt = $mysqli->prepare($sql);
             $stmt->bind_param('issss', $sessionId, $like, $like, $like, $like);
         } elseif ($sessionRole === 2) {
+            // Admin: never externals — they fund those via Wallet ID on Fund Wallet only.
             $sql = "SELECT id, full_name, email, phone, role, COALESCE(registered_by, 0) AS registered_by,
+                           0 AS is_external, '' AS wallet_id,
                            COALESCE(vtu_balance,0) AS vtu_balance,
                            COALESCE(momo_balance,0) AS momo_balance,
                            COALESCE(logical_balance,0) AS logical_balance
@@ -107,6 +112,7 @@ if ($action === 'recipients') {
             $stmt->bind_param('iisss', $sessionId, $sessionId, $like, $like, $like);
         } else {
             $sql = "SELECT id, full_name, email, phone, role, COALESCE(registered_by, 0) AS registered_by,
+                           0 AS is_external, '' AS wallet_id,
                            COALESCE(vtu_balance,0) AS vtu_balance,
                            COALESCE(momo_balance,0) AS momo_balance,
                            COALESCE(logical_balance,0) AS logical_balance
@@ -131,17 +137,27 @@ if ($action === 'recipients') {
                 }
                 $role = (int) $row['role'];
                 $roleLabel = $role === 2 ? 'Admin' : ($role === 1 ? 'Agent' : 'Customer');
-                $recipients[] = [
+                $isExt = (int) ($row['is_external'] ?? 0) === 1;
+                $entry = [
                     'id' => (int) $row['id'],
                     'full_name' => (string) $row['full_name'],
-                    'email' => (string) $row['email'],
-                    'phone' => (string) $row['phone'],
                     'role' => $role,
                     'role_label' => $roleLabel,
                     'vtu' => (float) $row['vtu_balance'],
                     'momo' => (float) $row['momo_balance'],
                     'logical' => (float) $row['logical_balance'],
                 ];
+                // Externals (SA-only search hits): expose name + wallet id, not email/phone.
+                if ($isExt && $sessionRole >= 3) {
+                    $entry['email'] = '';
+                    $entry['phone'] = '';
+                    $entry['wallet_id'] = (string) ($row['wallet_id'] ?? '');
+                    $entry['is_external'] = true;
+                } else {
+                    $entry['email'] = (string) $row['email'];
+                    $entry['phone'] = (string) $row['phone'];
+                }
+                $recipients[] = $entry;
             }
             $stmt->close();
         }

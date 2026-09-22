@@ -488,11 +488,11 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                   ),
                   const SizedBox(height: 20),
                   if (!isSuperAdmin) ...[
-                    const Text('Transfer by Wallet ID', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const Text('External wallets (Wallet ID only)', style: TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
                     const Text(
-                      'Enter a Wallet ID to transfer without selecting a user from the list.',
-                      style: TextStyle(fontSize: 12, color: EcColors.muted),
+                      'External customers never appear in the list below. Enter their Wallet ID — you will only see their name and Wallet ID (no email or phone search).',
+                      style: TextStyle(fontSize: 12, color: EcColors.muted, height: 1.35),
                     ),
                     const SizedBox(height: 8),
                     TextField(
@@ -507,7 +507,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                         _resolveWalletId();
                       },
                       decoration: const InputDecoration(
-                        hintText: 'e.g. 7k2M-83914X or WMX482917',
+                        hintText: 'Paste Wallet ID',
                         prefixIcon: Icon(Icons.qr_code_2_outlined),
                       ),
                     ),
@@ -535,7 +535,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                       ),
                     ],
                     const SizedBox(height: 16),
-                    const Text('Or select a user', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const Text('Internal users', style: TextStyle(fontWeight: FontWeight.w700)),
                   ] else
                     const Text('Select user', style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
@@ -545,7 +545,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                     decoration: InputDecoration(
                       hintText: isSuperAdmin
                           ? 'Search name, email, phone, wallet ID…'
-                          : 'Search name, email, phone…',
+                          : 'Search internal users by name, email, phone…',
                       prefixIcon: const Icon(Icons.search),
                     ),
                   ),

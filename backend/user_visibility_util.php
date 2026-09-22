@@ -3,10 +3,12 @@
  * Internal vs external user visibility + wallet IDs.
  *
  * Rules:
- * - Super Admin: sees everyone; can set internal/external; sees wallet IDs.
- * - Super Admin invite links default to external registration (optional vis=int).
- * - Admin / others: never see is_external labels; never see external users in
- *   manage-users lists; may fund external wallets only by wallet_id.
+ * - Super Admin: sees everyone in Manage Users; can set internal/external; sees wallet IDs.
+ * - Super Admin invite / Register Customer defaults to external (optional internal).
+ * - Admin: never see external users in Manage Users, fund-user lists, or peer-transfer
+ *   search. Externals are reachable only by exact Wallet ID on Fund Wallet.
+ * - When Admin resolves/funds an external Wallet ID, response/UI may show only
+ *   full name + Wallet ID (no email, phone, numeric user id, or visibility label).
  * - When funding/history involves an external wallet by ID, Admin may see
  *   the account name together with the Wallet ID (no Internal/External label).
  *

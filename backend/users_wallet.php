@@ -24,7 +24,8 @@ $sessionId = (int) $sessionUser['id'];
 $sessionRole = (int) $sessionUser['role'];
 
 if ($action === 'resolve_wallet') {
-    // Admin / SA: look up an external wallet ID and return name + id for confirmation UI.
+    // Admin / SA: look up an external wallet ID.
+    // For Admin this is the ONLY way to reach an external — return name + wallet id only.
     if ($sessionRole < 2) {
         http_response_code(403);
         echo json_encode(['success' => false, 'message' => 'Admin access required']);
@@ -37,7 +38,7 @@ if ($action === 'resolve_wallet') {
         exit;
     }
     $find = $mysqli->prepare(
-        'SELECT id, full_name, role, COALESCE(is_external, 0) AS is_external,
+        'SELECT full_name, role, COALESCE(is_external, 0) AS is_external,
                 COALESCE(wallet_id, \'\') AS wallet_id
          FROM users WHERE UPPER(TRIM(wallet_id)) = UPPER(?) LIMIT 1'
     );
@@ -61,6 +62,7 @@ if ($action === 'resolve_wallet') {
     }
     $fullName = (string) ($row['full_name'] ?? '');
     $walletId = trim((string) ($row['wallet_id'] ?? ''));
+    // Intentionally omit id / email / phone / role so Admin cannot search or fund by them.
     echo json_encode([
         'success' => true,
         'full_name' => $fullName,
