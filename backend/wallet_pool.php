@@ -851,16 +851,11 @@ function vtu_hold_try_settle(mysqli $mysqli, array $hold): array
 
     $poll = smobile_vtu_request('GET', '/v1/transaction/' . rawurlencode($reference));
     $pBody = is_array($poll['body'] ?? null) ? $poll['body'] : [];
-    $pStatus = '';
-    if (!empty($pBody['status'])) {
-        $pStatus = strtolower(trim((string) $pBody['status']));
-    } elseif (isset($pBody['data']) && is_array($pBody['data']) && !empty($pBody['data']['status'])) {
-        $pStatus = strtolower(trim((string) $pBody['data']['status']));
-    } elseif (isset($pBody['transaction']) && is_array($pBody['transaction']) && !empty($pBody['transaction']['status'])) {
-        $pStatus = strtolower(trim((string) $pBody['transaction']['status']));
-    }
+    $info = smobile_vtu_status_info($pBody, (int) ($poll['http_code'] ?? 0), true);
+    $pStatus = $info['class'];
+    $pStatusRaw = $info['raw'];
 
-    if (in_array($pStatus, ['success', 'successful', 'completed'], true)) {
+    if ($info['success']) {
         $amount = isset($hold['amount']) ? (float) $hold['amount'] : null;
         $ok = vtu_hold_complete($mysqli, $reference, $amount !== null && $amount > 0 ? $amount : null);
         return [
@@ -870,7 +865,7 @@ function vtu_hold_try_settle(mysqli $mysqli, array $hold): array
         ];
     }
 
-    if (in_array($pStatus, ['failed', 'failure', 'reversed', 'cancelled', 'canceled'], true)) {
+    if ($info['failed']) {
         $ok = vtu_hold_refund($mysqli, $reference);
         return [
             'outcome' => $ok ? 'refunded' : 'still_held',
@@ -883,7 +878,7 @@ function vtu_hold_try_settle(mysqli $mysqli, array $hold): array
 
     // Provider still processing, or unknown/empty status — leave held.
     // Very old non-provisional holds with no usable provider status: refund after 2h.
-    if ($ageSec >= 7200 && ($pStatus === '' || in_array($pStatus, ['unknown', 'not_found', 'not found'], true))) {
+    if ($ageSec >= 7200 && ($pStatusRaw === '' || in_array($pStatusRaw, ['unknown', 'not_found', 'not found'], true))) {
         $ok = vtu_hold_refund($mysqli, $reference);
         return [
             'outcome' => $ok ? 'refunded' : 'still_held',

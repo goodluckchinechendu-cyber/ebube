@@ -637,21 +637,23 @@ vtu_upsert_agent_transaction(
 );
 
 $result = smobile_vtu_request('POST', '/v1/purchase', $payload);
-$body = $result['body'] ?? [];
-$status = strtolower(trim((string) ($body['status'] ?? '')));
-$providerSuccess = !empty($body['success']) || $status === 'success';
-$processing = in_array($status, ['processing', 'pending', 'queued'], true);
+$body = is_array($result['body'] ?? null) ? $result['body'] : [];
+$info = smobile_vtu_status_info($body, (int) ($result['http_code'] ?? 0));
+$providerSuccess = $info['success'];
+$processing = $info['processing'];
+$status = $info['raw'] !== '' ? $info['raw'] : $info['class'];
 
 if ($processing && !empty($body['reference'])) {
     $ref = (string) $body['reference'];
     for ($i = 0; $i < 6; $i++) {
         usleep(1500000);
         $poll = smobile_vtu_request('GET', '/v1/transaction/' . rawurlencode($ref));
-        $body = $poll['body'] ?? $body;
+        $body = is_array($poll['body'] ?? null) ? $poll['body'] : $body;
         $result = $poll;
-        $status = strtolower(trim((string) ($body['status'] ?? '')));
-        $providerSuccess = !empty($body['success']) || $status === 'success';
-        $processing = in_array($status, ['processing', 'pending', 'queued'], true);
+        $info = smobile_vtu_status_info($body, (int) ($poll['http_code'] ?? 0), true);
+        $providerSuccess = $info['success'];
+        $processing = $info['processing'];
+        $status = $info['raw'] !== '' ? $info['raw'] : $info['class'];
         if (!$processing) {
             break;
         }
@@ -659,6 +661,9 @@ if ($processing && !empty($body['reference'])) {
 }
 
 $reference = trim((string) ($body['reference'] ?? ''));
+if ($reference === '' && is_array($body['data'] ?? null)) {
+    $reference = trim((string) ($body['data']['reference'] ?? ''));
+}
 
 // Without a provider reference we cannot auto-complete/refund via webhook or poll.
 if ($reference === '') {
@@ -699,6 +704,7 @@ if (!vtu_hold_rekey($mysqli, $provisionalRef, $reference, $receiptId)) {
     }
 }
 
+$agentStatus = $processing ? 'Processing' : ($providerSuccess ? 'Completed' : 'Failed');
 vtu_upsert_agent_transaction(
     $mysqli,
     $receiptId,
@@ -706,7 +712,7 @@ vtu_upsert_agent_transaction(
     $phone,
     $productFull,
     $chargeAmount,
-    $processing ? 'Processing' : ($providerSuccess ? 'Completed' : 'Failed'),
+    $agentStatus,
     $servedBy,
     $phone,
     'MTN'
@@ -714,6 +720,7 @@ vtu_upsert_agent_transaction(
 vtu_purge_provisional_processing_orphans($mysqli, $reference, $receiptId);
 
 // Still processing after polls: keep local debit held (do NOT refund).
+// Follow SMobile — only fail when they report a failed status.
 if ($processing) {
     $updated = fetch_user_role_row($mysqli, $userId);
     $body['success'] = false;
@@ -755,9 +762,7 @@ if (!$providerSuccess) {
         $body['message'] = 'Purchase failed; local wallet was refunded';
     }
     $body['success'] = false;
-    if ($status === '' || $status === 'success') {
-        $body['status'] = 'failed';
-    }
+    $body['status'] = 'failed';
     smobile_vtu_respond([
         'http_code' => (int) ($result['http_code'] ?? 400),
         'body' => $body,

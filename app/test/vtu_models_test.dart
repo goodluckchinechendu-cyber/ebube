@@ -25,6 +25,19 @@ void main() {
       expect(r.reference, 'SM-1');
     });
 
+    test('completed maps to success', () {
+      final r = VtuResponse.fromJson({
+        'response_code': 200,
+        'success': false,
+        'status': 'completed',
+        'message': 'done',
+        'reference': 'SM-1b',
+      });
+      expect(r.success, isTrue);
+      expect(r.status, 'success');
+      expect(r.isFailed, isFalse);
+    });
+
     test('processing even if success false', () {
       final r = VtuResponse.fromJson({
         'response_code': 200,
@@ -34,6 +47,28 @@ void main() {
         'reference': 'SM-2',
       });
       expect(r.success, isFalse);
+      expect(r.isProcessing, isTrue);
+      expect(r.isFailed, isFalse);
+    });
+
+    test('reference without status stays processing', () {
+      final r = VtuResponse.fromJson({
+        'response_code': 202,
+        'success': false,
+        'message': 'accepted',
+        'reference': 'SM-2b',
+      });
+      expect(r.isProcessing, isTrue);
+      expect(r.isFailed, isFalse);
+      expect(r.status, 'processing');
+    });
+
+    test('in_progress is processing', () {
+      final r = VtuResponse.fromJson({
+        'success': false,
+        'status': 'In Progress',
+        'reference': 'SM-2c',
+      });
       expect(r.isProcessing, isTrue);
       expect(r.isFailed, isFalse);
     });

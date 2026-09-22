@@ -205,3 +205,106 @@ function smobile_vtu_respond(array $result): void
     http_response_code($code);
     echo json_encode($result['body'], JSON_UNESCAPED_SLASHES);
 }
+
+/**
+ * Pull status from common SMobile / nested response shapes.
+ */
+function smobile_vtu_extract_status(array $body): string
+{
+    $candidates = [
+        $body['status'] ?? null,
+        $body['transaction_status'] ?? null,
+        $body['txn_status'] ?? null,
+        is_array($body['data'] ?? null) ? ($body['data']['status'] ?? null) : null,
+        is_array($body['data'] ?? null) ? ($body['data']['transaction_status'] ?? null) : null,
+        is_array($body['transaction'] ?? null) ? ($body['transaction']['status'] ?? null) : null,
+        is_array($body['result'] ?? null) ? ($body['result']['status'] ?? null) : null,
+    ];
+    foreach ($candidates as $c) {
+        if ($c === null || $c === '') {
+            continue;
+        }
+        return strtolower(trim((string) $c));
+    }
+    return '';
+}
+
+/**
+ * Classify SMobile status into success | processing | failed.
+ * Unknown / empty with a live provider reference must NOT become failed —
+ * SMobile is the source of truth and may still be processing.
+ *
+ * @return 'success'|'processing'|'failed'
+ */
+function smobile_vtu_classify_status(
+    string $status,
+    ?bool $successFlag = null,
+    ?int $httpCode = null,
+    bool $hasReference = false
+): string {
+    $s = strtolower(trim($status));
+    $s = str_replace([' ', '-'], '_', $s);
+
+    $success = [
+        'success', 'successful', 'completed', 'complete', 'ok', 'done', 'delivered', 'fulfilled',
+    ];
+    $processing = [
+        'processing', 'pending', 'queued', 'queue', 'in_progress', 'inprogress', 'progress',
+        'awaiting', 'initiated', 'submitted', 'accepted', 'received', 'ongoing', 'waiting',
+        'started', 'running', 'open', 'active', 'process',
+    ];
+    $failed = [
+        'failed', 'failure', 'fail', 'reversed', 'cancelled', 'canceled', 'error', 'errored',
+        'declined', 'rejected', 'timeout', 'timed_out', 'expired', 'abort', 'aborted',
+    ];
+
+    if (in_array($s, $success, true)) {
+        return 'success';
+    }
+    if (in_array($s, $failed, true)) {
+        return 'failed';
+    }
+    if (in_array($s, $processing, true)) {
+        return 'processing';
+    }
+
+    if ($s === '') {
+        if ($successFlag === true) {
+            return 'success';
+        }
+        if ($httpCode === 202 || $hasReference) {
+            return 'processing';
+        }
+        if ($successFlag === false) {
+            return 'failed';
+        }
+        return $hasReference ? 'processing' : 'failed';
+    }
+
+    // Non-empty but unrecognized: keep as processing so we do not contradict SMobile.
+    return 'processing';
+}
+
+/**
+ * @return array{raw:string, class:string, success:bool, processing:bool, failed:bool}
+ */
+function smobile_vtu_status_info(array $body, ?int $httpCode = null, bool $hasReference = false): array
+{
+    $raw = smobile_vtu_extract_status($body);
+    $flag = array_key_exists('success', $body) ? (bool) $body['success'] : null;
+    if (!$hasReference) {
+        $ref = trim((string) ($body['reference'] ?? ''));
+        if ($ref === '' && is_array($body['data'] ?? null)) {
+            $ref = trim((string) ($body['data']['reference'] ?? ''));
+        }
+        $hasReference = $ref !== '';
+    }
+    $class = smobile_vtu_classify_status($raw, $flag, $httpCode, $hasReference);
+    return [
+        'raw' => $raw,
+        'class' => $class,
+        'success' => $class === 'success',
+        'processing' => $class === 'processing',
+        'failed' => $class === 'failed',
+    ];
+}

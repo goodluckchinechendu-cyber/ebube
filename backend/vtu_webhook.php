@@ -130,11 +130,12 @@ $stmt->close();
 
 // Settle local injected-wallet holds when provider reaches a final status.
 $statusLower = strtolower($status);
+$info = smobile_vtu_classify_status($statusLower, null, null, $reference !== '');
 $holdNote = null;
 if ($reference !== '') {
-    if (in_array($statusLower, ['success', 'successful', 'completed'], true)) {
+    if ($info === 'success') {
         $holdNote = vtu_hold_complete($mysqli, $reference) ? 'hold_completed' : 'hold_complete_skipped';
-    } elseif (in_array($statusLower, ['failed', 'failure', 'reversed', 'cancelled', 'canceled'], true)) {
+    } elseif ($info === 'failed') {
         $holdNote = vtu_hold_refund($mysqli, $reference) ? 'hold_refunded' : 'hold_refund_skipped';
     }
 }

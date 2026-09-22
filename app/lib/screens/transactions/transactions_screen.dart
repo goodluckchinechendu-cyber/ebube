@@ -82,6 +82,28 @@ class TransactionItem {
   }
 }
 
+Color _statusBg(String status) {
+  final s = status.toLowerCase();
+  if (s == 'completed' || s == 'success' || s == 'successful') {
+    return EcColors.success.withValues(alpha: 0.15);
+  }
+  if (s == 'failed' || s == 'failure' || s == 'refunded' || s == 'cancelled' || s == 'canceled') {
+    return EcColors.danger.withValues(alpha: 0.15);
+  }
+  return Colors.orange.withValues(alpha: 0.15);
+}
+
+Color _statusFg(String status) {
+  final s = status.toLowerCase();
+  if (s == 'completed' || s == 'success' || s == 'successful') {
+    return EcColors.success;
+  }
+  if (s == 'failed' || s == 'failure' || s == 'refunded' || s == 'cancelled' || s == 'canceled') {
+    return EcColors.danger;
+  }
+  return Colors.orange.shade800;
+}
+
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key, this.allAccounts = false});
 
@@ -337,9 +359,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: item.status.toLowerCase() == 'completed'
-                                              ? EcColors.success.withValues(alpha: 0.15)
-                                              : Colors.orange.withValues(alpha: 0.15),
+                                          color: _statusBg(item.status),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(
@@ -347,9 +367,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
-                                            color: item.status.toLowerCase() == 'completed'
-                                                ? EcColors.success
-                                                : Colors.orange.shade800,
+                                            color: _statusFg(item.status),
                                           ),
                                         ),
                                       ),

@@ -180,42 +180,90 @@ class VtuResponse {
   final Map<String, dynamic> raw;
 
   bool get isProcessing {
-    final s = status.toLowerCase();
-    return s == 'processing' ||
-        s == 'pending' ||
-        s == 'queued' ||
-        s == 'uncertain';
+    final s = status.toLowerCase().replaceAll(RegExp(r'[\s-]'), '_');
+    const processing = {
+      'processing',
+      'pending',
+      'queued',
+      'queue',
+      'in_progress',
+      'inprogress',
+      'progress',
+      'awaiting',
+      'initiated',
+      'submitted',
+      'accepted',
+      'received',
+      'ongoing',
+      'waiting',
+      'started',
+      'running',
+      'open',
+      'active',
+      'process',
+      'uncertain',
+    };
+    return processing.contains(s);
   }
 
   bool get isUncertain => status.toLowerCase() == 'uncertain';
 
-  bool get isFailed =>
-      !success && !isProcessing && status.toLowerCase() != 'success';
+  bool get isSuccessStatus => _isVtuSuccessToken(status);
+
+  bool get isFailed => !success && !isProcessing && !isSuccessStatus;
 
   factory VtuResponse.fromJson(Map<String, dynamic> json) {
-    final statusRaw = '${json['status'] ?? ''}'.trim().toLowerCase();
-    final flaggedSuccess = json['success'] == true;
+    String pickStatus(Map<String, dynamic> map) {
+      for (final key in ['status', 'transaction_status', 'txn_status']) {
+        final v = '${map[key] ?? ''}'.trim();
+        if (v.isNotEmpty) return v.toLowerCase();
+      }
+      final data = map['data'];
+      if (data is Map) {
+        final nested = pickStatus(Map<String, dynamic>.from(data));
+        if (nested.isNotEmpty) return nested;
+      }
+      final txn = map['transaction'];
+      if (txn is Map) {
+        final nested = pickStatus(Map<String, dynamic>.from(txn));
+        if (nested.isNotEmpty) return nested;
+      }
+      return '';
+    }
 
-    // Docs: success is true only when status is "success".
+    final statusRaw = pickStatus(json);
+    final flaggedSuccess = json['success'] == true;
+    final responseCode = _asInt(json['response_code'] ?? json['status_code']);
+    final hasRef = _asNonEmptyString(json['reference']) != null ||
+        (json['data'] is Map &&
+            _asNonEmptyString((json['data'] as Map)['reference']) != null);
+
     late final String status;
     if (statusRaw.isNotEmpty) {
-      status = statusRaw;
+      status = statusRaw.replaceAll(RegExp(r'[\s-]'), '_');
     } else if (flaggedSuccess) {
       status = 'success';
+    } else if (responseCode == 202 || hasRef) {
+      // HTTP 202 or a live provider reference without a final status → still processing.
+      status = 'processing';
     } else {
       status = 'failed';
     }
 
-    final success = status == 'success' || (statusRaw.isEmpty && flaggedSuccess);
+    final success = _isVtuSuccessToken(status) || (statusRaw.isEmpty && flaggedSuccess);
 
-    final message = '${json['message'] ?? json['error'] ?? json['detail'] ?? ''}'.trim();
+    final message =
+        '${json['message'] ?? json['error'] ?? json['detail'] ?? ''}'.trim();
 
     return VtuResponse(
       success: success,
       message: message,
-      status: status,
-      responseCode: _asInt(json['response_code'] ?? json['status_code']),
-      reference: _asNonEmptyString(json['reference']),
+      status: success ? 'success' : status,
+      responseCode: responseCode,
+      reference: _asNonEmptyString(json['reference']) ??
+          (json['data'] is Map
+              ? _asNonEmptyString((json['data'] as Map)['reference'])
+              : null),
       customerReference: _asNonEmptyString(json['customer_reference']),
       type: json['type']?.toString(),
       networkId: _asInt(json['network_id']),
@@ -234,6 +282,21 @@ int? _asInt(dynamic v) {
   if (v == null) return null;
   if (v is num) return v.toInt();
   return int.tryParse('$v'.trim());
+}
+
+bool _isVtuSuccessToken(String status) {
+  final s = status.toLowerCase().replaceAll(RegExp(r'[\s-]'), '_');
+  const ok = {
+    'success',
+    'successful',
+    'completed',
+    'complete',
+    'ok',
+    'done',
+    'delivered',
+    'fulfilled',
+  };
+  return ok.contains(s);
 }
 
 String? _asNonEmptyString(dynamic v) {

@@ -45,23 +45,18 @@ $path = '/v1/transaction/' . rawurlencode($reference);
 $result = smobile_vtu_request('GET', $path);
 $body = is_array($result['body'] ?? null) ? $result['body'] : [];
 
-$status = '';
-if (!empty($body['status'])) {
-    $status = strtolower(trim((string) $body['status']));
-} elseif (isset($body['data']) && is_array($body['data']) && !empty($body['data']['status'])) {
-    $status = strtolower(trim((string) $body['data']['status']));
-} elseif (isset($body['transaction']) && is_array($body['transaction']) && !empty($body['transaction']['status'])) {
-    $status = strtolower(trim((string) $body['transaction']['status']));
-}
+$info = smobile_vtu_status_info($body, (int) ($result['http_code'] ?? 0), true);
+$status = $info['class'];
+// Surface normalized status so the app mirrors SMobile classification.
+$body['status'] = $status;
+$body['success'] = $info['success'];
 
 $holdNote = null;
-if ($status !== '') {
-    if (in_array($status, ['success', 'successful', 'completed'], true)) {
-        $holdNote = vtu_hold_complete($mysqli, $reference) ? 'hold_completed' : 'hold_complete_skipped';
-    } elseif (in_array($status, ['failed', 'failure', 'reversed', 'cancelled', 'canceled'], true)) {
-        $holdNote = vtu_hold_refund($mysqli, $reference) ? 'hold_refunded' : 'hold_refund_skipped';
-    }
-} elseif (str_starts_with($reference, 'PEND-')) {
+if ($info['success']) {
+    $holdNote = vtu_hold_complete($mysqli, $reference) ? 'hold_completed' : 'hold_complete_skipped';
+} elseif ($info['failed']) {
+    $holdNote = vtu_hold_refund($mysqli, $reference) ? 'hold_refunded' : 'hold_refund_skipped';
+} elseif (str_starts_with($reference, 'PEND-') && $info['raw'] === '') {
     // Provisional refs never exist at the provider — settle via TTL / local state.
     $holdStmt = $mysqli->prepare(
         'SELECT id, reference, receipt_id, user_id, wallet_product, amount, face_amount,
@@ -91,7 +86,7 @@ $body['hold'] = $holdNote;
 $body['session_user_id'] = (int) $sessionUser['id'];
 
 // After settle (or if already settled), surface Ebube charge + commission for the UI.
-if (in_array($status, ['success', 'successful', 'completed'], true)) {
+if ($status === 'success') {
     $holdStmt = $mysqli->prepare(
         'SELECT amount, face_amount FROM vtu_wallet_holds WHERE reference = ? LIMIT 1'
     );
