@@ -56,6 +56,7 @@ class AuthController extends ChangeNotifier {
       email: fields['email']!,
       pin: fields['password']!,
       referralCode: fields['referral_code'],
+      visibility: fields['visibility'] ?? fields['vis'],
     );
   }
 

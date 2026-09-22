@@ -50,6 +50,18 @@ function ensure_user_visibility_columns(mysqli $mysqli): ?string
                 return $mysqli->error ?: 'Could not widen wallet_id';
             }
         }
+        // Repair missing unique index on existing installs.
+        $idx = $mysqli->query("SHOW INDEX FROM `users` WHERE Key_name = 'uniq_users_wallet_id'");
+        if ($idx && $idx->num_rows === 0) {
+            if (!$mysqli->query(
+                "ALTER TABLE `users` ADD UNIQUE KEY `uniq_users_wallet_id` (`wallet_id`)"
+            )) {
+                // Non-fatal if duplicates already exist.
+            }
+        }
+        if ($idx) {
+            $idx->free();
+        }
     }
     if ($wid) {
         $wid->free();

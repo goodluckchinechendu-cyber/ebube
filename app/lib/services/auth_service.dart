@@ -1,5 +1,6 @@
 import '../models/user.dart';
 import 'api_client.dart';
+import 'referral_store.dart';
 import 'session_store.dart';
 
 class EmailVerifyChallenge {
@@ -90,6 +91,8 @@ class AuthService {
     final user = AgentUser.fromJson(Map<String, dynamic>.from(userMap));
     AuthTokenHolder.token = token;
     await _session.saveSession(user: user, token: token);
+    // Don't keep an unused invite attached after a successful sign-in.
+    await ReferralStore.clear();
     return user;
   }
 
@@ -101,7 +104,9 @@ class AuthService {
     required String email,
     required String pin,
     String? referralCode,
+    String? visibility,
   }) async {
+    final vis = (visibility ?? '').trim().toLowerCase();
     final data = await _api.post('register.php', body: {
       'full_name': fullName.trim(),
       'phone': phone.trim(),
@@ -111,6 +116,10 @@ class AuthService {
       'password': pin.trim(),
       if (referralCode != null && referralCode.trim().isNotEmpty)
         'referral_code': referralCode.trim().toUpperCase(),
+      if (vis == 'ext' || vis == 'external' || vis == 'int' || vis == 'internal')
+        'visibility': vis == 'external'
+            ? 'ext'
+            : (vis == 'internal' ? 'int' : vis),
     });
 
     return EmailVerifyChallenge(

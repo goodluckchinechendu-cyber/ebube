@@ -399,7 +399,8 @@ if ($action === 'fund') {
             'logical' => 'Logical Airtime Wallet',
         ];
         $walletName = $walletLabels[$productId] ?? ($productId . ' Wallet');
-        $userName = trim((string) ($targetDisplayName ?? ($user['full_name'] ?? '')));
+        // Store the real full name; mask for Admin viewers only when listing history.
+        $userName = trim((string) ($user['full_name'] ?? ''));
         if ($userName === '') {
             $userName = 'User';
         }

@@ -129,8 +129,8 @@ $insert_stmt->close();
 
 // Super Admin invites: register as external by default (vis=int opts out).
 // Only applies when registration used an invite referral code (not CRM phone match alone).
-$registeredAsExternal = false;
-$issuedWalletId = '';
+$isExternalOut = false;
+$walletIdOut = '';
 if ($registeredBy !== null && $registeredBy > 0 && $refCode !== '') {
     $inv = $mysqli->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
     if ($inv) {
@@ -143,16 +143,47 @@ if ($registeredBy !== null && $registeredBy > 0 && $refCode !== '') {
             $wantInternal = in_array($visRaw, ['int', 'internal', '0', 'false'], true);
             if (!$wantInternal) {
                 ensure_user_visibility_columns($mysqli);
-                $issuedWalletId = user_generate_wallet_id($mysqli);
-                $visUpd = $mysqli->prepare(
-                    'UPDATE users SET is_external = 1, wallet_id = ? WHERE id = ?'
-                );
-                if ($visUpd) {
-                    $visUpd->bind_param('si', $issuedWalletId, $userId);
-                    if ($visUpd->execute()) {
-                        $registeredAsExternal = true;
+                $marked = false;
+                for ($attempt = 0; $attempt < 5 && !$marked; $attempt++) {
+                    $candidate = user_generate_wallet_id($mysqli);
+                    $visUpd = $mysqli->prepare(
+                        'UPDATE users SET is_external = 1, wallet_id = ? WHERE id = ?'
+                    );
+                    if (!$visUpd) {
+                        break;
                     }
+                    $visUpd->bind_param('si', $candidate, $userId);
+                    $ok = $visUpd->execute();
                     $visUpd->close();
+                    if (!$ok) {
+                        continue;
+                    }
+                    $check = $mysqli->prepare(
+                        'SELECT COALESCE(is_external, 0) AS is_external, COALESCE(wallet_id, \'\') AS wallet_id
+                         FROM users WHERE id = ? LIMIT 1'
+                    );
+                    if (!$check) {
+                        break;
+                    }
+                    $check->bind_param('i', $userId);
+                    $check->execute();
+                    $crow = $check->get_result()->fetch_assoc();
+                    $check->close();
+                    if ($crow && (int) ($crow['is_external'] ?? 0) === 1) {
+                        $isExternalOut = true;
+                        $walletIdOut = trim((string) ($crow['wallet_id'] ?? $candidate));
+                        $marked = true;
+                    }
+                }
+                if (!$marked) {
+                    http_response_code(500);
+                    echo json_encode([
+                        'success' => false,
+                        'message' => 'Account created but could not assign external wallet ID. Contact support.',
+                        'user_id' => $userId,
+                    ]);
+                    $mysqli->close();
+                    exit;
                 }
             }
         }
@@ -206,6 +237,8 @@ echo json_encode([
         'role' => $role,
         'email_verified' => false,
         'has_transaction_pin' => false,
+        'is_external' => $isExternalOut,
+        'wallet_id' => $isExternalOut ? $walletIdOut : '',
     ],
 ]);
 

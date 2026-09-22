@@ -29,11 +29,18 @@ $entries = [];
 
 /**
  * Display label for an external wallet (name + Wallet ID for Admin viewers).
+ * Idempotent if $nameKey is already a "Name · Wallet ID" label.
  */
 function wh_external_label(array $row, string $nameKey, string $walletKey, string $fallback): string
 {
     $name = trim((string) ($row[$nameKey] ?? ''));
     $walletId = trim((string) ($row[$walletKey] ?? ''));
+    if ($walletId !== '' && preg_match('/\s·\sWallet\s+' . preg_quote($walletId, '/') . '$/i', $name)) {
+        return $name;
+    }
+    if ($walletId !== '' && stripos($name, ' · Wallet ') !== false) {
+        return $name;
+    }
     $label = user_external_display_label($name, $walletId);
     return $label !== 'Wallet' ? $label : $fallback;
 }

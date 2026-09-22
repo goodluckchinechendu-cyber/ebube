@@ -95,7 +95,14 @@ function funding_row_to_array(array $row, int $viewerRole = 3): array
     $customerName = (string) ($row['user_name'] ?? '');
     if ($viewerRole < 3 && (int) ($row['wallet_is_external'] ?? 0) === 1) {
         $wid = trim((string) ($row['wallet_wallet_id'] ?? ''));
-        $customerName = user_external_display_label($customerName, $wid);
+        // Avoid double-masking rows that already stored "Name · Wallet ID".
+        if ($wid !== '' && preg_match('/\s·\sWallet\s+' . preg_quote($wid, '/') . '$/i', $customerName)) {
+            // already labeled
+        } elseif ($wid !== '' && stripos($customerName, ' · Wallet ') !== false) {
+            // already labeled
+        } else {
+            $customerName = user_external_display_label($customerName, $wid);
+        }
     }
 
     return [
