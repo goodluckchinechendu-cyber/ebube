@@ -65,6 +65,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         body['referral_code'] = ref;
       }
       final vis = await ReferralStore.loadVisibility();
+      if (!mounted) return;
       if (vis != null && vis.isNotEmpty) {
         body['visibility'] = vis;
       }

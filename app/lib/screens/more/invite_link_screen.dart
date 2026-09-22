@@ -21,6 +21,7 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
   String? _url;
   String? _code;
   int _underCount = 0;
+  int _loadSeq = 0;
   /// Super Admin only: default external for invitees.
   bool _registerAsExternal = true;
 
@@ -33,36 +34,49 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
   }
 
   Future<void> _load({bool quiet = false}) async {
+    final seq = ++_loadSeq;
+    final requestedExternal = _registerAsExternal;
     if (!quiet) {
       setState(() {
         _loading = true;
         _error = null;
       });
-    } else {
-      setState(() => _error = null);
     }
     try {
-      final vis = _registerAsExternal ? 'ext' : 'int';
+      final vis = requestedExternal ? 'ext' : 'int';
       final isSa = AuthScope.of(context).user?.isSuperAdmin == true;
       final data = await _api.get(
         'invite_link.php',
         query: isSa ? {'visibility': vis} : null,
       );
-      if (!mounted) return;
+      if (!mounted || seq != _loadSeq) return;
       setState(() {
         _url = '${data['invite_url'] ?? ''}';
         _code = '${data['referral_code'] ?? ''}';
         _underCount = (data['registered_under_count'] as num?)?.toInt() ?? 0;
-        final dv = '${data['default_visibility'] ?? ''}'.toLowerCase();
-        if (dv == 'int' || dv == 'internal') {
-          _registerAsExternal = false;
-        } else if (dv == 'ext' || dv == 'external') {
-          _registerAsExternal = true;
+        // Keep the toggle the user just chose; only sync from server on full load.
+        if (!quiet) {
+          final dv = '${data['default_visibility'] ?? ''}'.toLowerCase();
+          if (dv == 'int' || dv == 'internal') {
+            _registerAsExternal = false;
+          } else if (dv == 'ext' || dv == 'external') {
+            _registerAsExternal = true;
+          }
+        } else {
+          _registerAsExternal = requestedExternal;
         }
         _loading = false;
+        _error = null;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _loadSeq) return;
+      if (quiet) {
+        // Keep current link visible; don't replace the whole screen.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not refresh invite link: $e')),
+        );
+        return;
+      }
       setState(() {
         _error = '$e';
         _loading = false;
