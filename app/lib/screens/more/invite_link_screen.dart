@@ -27,6 +27,23 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
 
   bool get _isSuperAdmin => AuthScope.of(context).user?.isSuperAdmin == true;
 
+  /// Always reflect the current External/Internal toggle in shared/copied links,
+  /// even if a quiet refresh has not finished yet.
+  String get _effectiveInviteUrl {
+    final raw = (_url ?? '').trim();
+    if (raw.isEmpty) return '';
+    if (!_isSuperAdmin) return raw;
+    try {
+      final uri = Uri.parse(raw);
+      final q = Map<String, String>.from(uri.queryParameters);
+      q['vis'] = _registerAsExternal ? 'ext' : 'int';
+      q.remove('visibility');
+      return uri.replace(queryParameters: q).toString();
+    } catch (_) {
+      return raw;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -71,7 +88,8 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
     } catch (e) {
       if (!mounted || seq != _loadSeq) return;
       if (quiet) {
-        // Keep current link visible; don't replace the whole screen.
+        // Revert toggle so UI matches the last good link.
+        setState(() => _registerAsExternal = !requestedExternal);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not refresh invite link: $e')),
         );
@@ -91,8 +109,8 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
   }
 
   Future<void> _copy() async {
-    final url = _url;
-    if (url == null || url.isEmpty) return;
+    final url = _effectiveInviteUrl;
+    if (url.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: url));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -101,8 +119,8 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
   }
 
   Future<void> _share() async {
-    final url = _url;
-    if (url == null || url.isEmpty) return;
+    final url = _effectiveInviteUrl;
+    if (url.isEmpty) return;
     try {
       await SharePlus.instance.share(
         ShareParams(
@@ -195,7 +213,7 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
                           const Text('Invite link', style: TextStyle(fontWeight: FontWeight.w700)),
                           const SizedBox(height: 6),
                           SelectableText(
-                            _url ?? '',
+                            _effectiveInviteUrl,
                             style: const TextStyle(fontSize: 13, height: 1.35),
                           ),
                           const SizedBox(height: 12),
