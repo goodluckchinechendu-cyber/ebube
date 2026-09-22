@@ -784,7 +784,8 @@ function vtu_hold_refund(mysqli $mysqli, string $reference): bool
 /** Seconds before an unrekeyed PEND-* hold is auto-refunded. */
 function vtu_hold_provisional_ttl_seconds(): int
 {
-    return 900;
+    // Longer window: SMobile may accept a purchase whose HTTP response never reaches us.
+    return 3600;
 }
 
 /**

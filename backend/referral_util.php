@@ -119,6 +119,10 @@ function user_can_wallet_transfer_to(array $from, array $to): bool
     $registeredBy = (int) ($to['registered_by'] ?? 0);
 
     if ($fromRole === 2) {
+        // Admin may peer-transfer to any external customer (fund/transfer by name or Wallet ID).
+        if ((int) ($to['is_external'] ?? 0) === 1 && $toRole < 3) {
+            return true;
+        }
         if ($toRole === 2) {
             return true;
         }

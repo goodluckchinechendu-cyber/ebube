@@ -306,6 +306,8 @@ $clientRequestId = trim((string) ($data['client_request_id'] ?? ''));
 if ($clientRequestId === '' || !preg_match('/^[A-Za-z0-9_\-]{8,64}$/', $clientRequestId)) {
     $clientRequestId = 'srv-' . bin2hex(random_bytes(16));
 }
+// So SMobile webhooks can settle holds even if the purchase HTTP reply timed out.
+$payload['customer_reference'] = $clientRequestId;
 
 $existingHold = vtu_hold_find_by_client_request($mysqli, $clientRequestId);
 if ($existingHold) {
@@ -643,10 +645,12 @@ $providerSuccess = $info['success'];
 $processing = $info['processing'];
 $status = $info['raw'] !== '' ? $info['raw'] : $info['class'];
 
+// Short in-request poll only — long waits risk platform/proxy timeouts that look like
+// "failed" while SMobile still delivers. Client + webhook/status poll finish settlement.
 if ($processing && !empty($body['reference'])) {
     $ref = (string) $body['reference'];
-    for ($i = 0; $i < 6; $i++) {
-        usleep(1500000);
+    for ($i = 0; $i < 2; $i++) {
+        usleep(2000000);
         $poll = smobile_vtu_request('GET', '/v1/transaction/' . rawurlencode($ref));
         $body = is_array($poll['body'] ?? null) ? $poll['body'] : $body;
         $result = $poll;
@@ -665,9 +669,56 @@ if ($reference === '' && is_array($body['data'] ?? null)) {
     $reference = trim((string) ($body['data']['reference'] ?? ''));
 }
 
-// Without a provider reference we cannot auto-complete/refund via webhook or poll.
+// No provider reference: only refund on a confirmed failure. Timeouts / unreachable
+// keep the provisional hold — SMobile may still have accepted the purchase.
 if ($reference === '') {
+    $providerUncertain = $processing
+        || !empty($body['provider_timeout'])
+        || !empty($body['provider_unreachable'])
+        || in_array((int) ($result['http_code'] ?? 0), [502, 503, 504], true);
+
+    if ($providerUncertain) {
+        $updated = fetch_user_role_row($mysqli, $userId);
+        $msg = (string) ($body['message'] ?? '');
+        if ($msg === '') {
+            $msg = 'Provider did not confirm in time. Do not retry — check Transactions; delivery may still complete.';
+        }
+        smobile_vtu_respond([
+            'http_code' => 202,
+            'body' => [
+                'success' => false,
+                'status' => 'uncertain',
+                'message' => $msg,
+                'local_wallet_held' => true,
+                'provider_timeout' => !empty($body['provider_timeout']),
+                'provider_unreachable' => !empty($body['provider_unreachable']),
+                'wallet_product' => $walletProduct,
+                'amount_charged' => $chargeAmount,
+                'receipt_id' => $provisionalReceipt,
+                'client_request_id' => $clientRequestId,
+                'transaction_at' => $txnAt,
+                'momo_balance' => (float) ($updated['momo_balance'] ?? 0),
+                'vtu_balance' => (float) ($updated['vtu_balance'] ?? 0),
+                'logical_balance' => (float) ($updated['logical_balance'] ?? 0),
+            ],
+        ]);
+        $mysqli->close();
+        exit;
+    }
+
     vtu_hold_refund($mysqli, $provisionalRef);
+    vtu_upsert_agent_transaction(
+        $mysqli,
+        $provisionalReceipt,
+        $userId,
+        $phone,
+        $productFull,
+        $chargeAmount,
+        'Failed',
+        $servedBy,
+        $phone,
+        'MTN'
+    );
     $updated = fetch_user_role_row($mysqli, $userId);
     smobile_vtu_respond([
         'http_code' => (int) ($result['http_code'] ?? 502),

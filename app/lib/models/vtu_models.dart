@@ -202,11 +202,22 @@ class VtuResponse {
       'active',
       'process',
       'uncertain',
+      'timeout',
+      'timed_out',
     };
     return processing.contains(s);
   }
 
-  bool get isUncertain => status.toLowerCase() == 'uncertain';
+  bool get isUncertain {
+    final s = status.toLowerCase().replaceAll(RegExp(r'[\s-]'), '_');
+    if (s == 'uncertain' || s == 'timeout' || s == 'timed_out') return true;
+    if (raw['provider_timeout'] == true) return true;
+    // Held without a provider reference cannot be polled yet — true uncertain.
+    // Do NOT treat every local_wallet_held processing response as uncertain
+    // (that would skip waitForFinalStatus on normal slow deliveries).
+    final hasRef = (reference ?? '').trim().isNotEmpty;
+    return raw['local_wallet_held'] == true && !hasRef && !success && !isSuccessStatus;
+  }
 
   bool get isSuccessStatus => _isVtuSuccessToken(status);
 
@@ -237,12 +248,17 @@ class VtuResponse {
     final hasRef = _asNonEmptyString(json['reference']) != null ||
         (json['data'] is Map &&
             _asNonEmptyString((json['data'] as Map)['reference']) != null);
+    final providerUncertain = json['provider_timeout'] == true ||
+        json['provider_unreachable'] == true ||
+        (json['local_wallet_held'] == true && !hasRef);
 
     late final String status;
     if (statusRaw.isNotEmpty) {
       status = statusRaw.replaceAll(RegExp(r'[\s-]'), '_');
     } else if (flaggedSuccess) {
       status = 'success';
+    } else if (providerUncertain || responseCode == 504) {
+      status = 'uncertain';
     } else if (json['success'] == false && responseCode != 202) {
       // Failed purchase responses often include a reference but no status.
       status = 'failed';

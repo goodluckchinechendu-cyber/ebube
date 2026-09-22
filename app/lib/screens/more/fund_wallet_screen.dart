@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -25,6 +27,10 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
   bool _funding = false;
   bool _resolvingWallet = false;
   int _resolveWalletSeq = 0;
+  Timer? _extSearchDebounce;
+  int _extSearchGen = 0;
+  bool _searchingExternals = false;
+  List<_FundUser> _externalHits = [];
   String? _error;
   String? _resolvedWalletLabel;
   String? _resolvedWalletName;
@@ -119,6 +125,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
 
   @override
   void dispose() {
+    _extSearchDebounce?.cancel();
     _searchCtrl.dispose();
     _amountCtrl.dispose();
     _walletIdCtrl.dispose();
@@ -227,6 +234,84 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
     }
   }
 
+  void _onExternalQueryChanged(String raw) {
+    setState(() {});
+    final q = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+    _extSearchDebounce?.cancel();
+    if (q.isEmpty) {
+      setState(() {
+        _externalHits = [];
+        _searchingExternals = false;
+        _resolvedWalletLabel = null;
+        _resolvedWalletName = null;
+        _resolvedForWalletId = null;
+      });
+      return;
+    }
+    _extSearchDebounce = Timer(const Duration(milliseconds: 350), () {
+      _searchExternals(q);
+    });
+    // Exact Wallet ID paste still resolves for the confirm banner.
+    _resolveWalletId();
+  }
+
+  Future<void> _searchExternals(String q) async {
+    final gen = ++_extSearchGen;
+    setState(() => _searchingExternals = true);
+    try {
+      final res = await _api.post(
+        'users_wallet.php',
+        body: {'action': 'search_external', 'q': q},
+        throwOnFailure: false,
+      );
+      if (!mounted || gen != _extSearchGen) return;
+      final list = (res['users'] as List? ?? [])
+          .whereType<Map>()
+          .map((e) {
+            final m = Map<String, dynamic>.from(e);
+            // Admin payloads omit id — keep id 0 and fund via wallet_id.
+            return _FundUser(
+              id: (m['id'] as num?)?.toInt() ?? 0,
+              fullName: '${m['full_name'] ?? ''}',
+              email: '${m['email'] ?? ''}',
+              phone: '${m['phone'] ?? ''}',
+              role: (m['role'] as num?)?.toInt() ?? 0,
+              momo: (m['momo_balance'] as num?)?.toDouble() ?? 0,
+              vtu: (m['vtu_balance'] as num?)?.toDouble() ?? 0,
+              logical: (m['logical_balance'] as num?)?.toDouble() ?? 0,
+              isExternal: true,
+              walletId: '${m['wallet_id'] ?? ''}'.trim(),
+            );
+          })
+          .where((u) => u.walletId.isNotEmpty)
+          .toList();
+      setState(() {
+        _externalHits = list;
+        _searchingExternals = false;
+      });
+    } catch (_) {
+      if (mounted && gen == _extSearchGen) {
+        setState(() {
+          _externalHits = [];
+          _searchingExternals = false;
+        });
+      }
+    }
+  }
+
+  void _selectExternalHit(_FundUser u) {
+    setState(() {
+      _selected = null;
+      _walletIdCtrl.text = u.walletId;
+      _resolvedForWalletId = u.walletId;
+      _resolvedWalletName = u.fullName;
+      _resolvedWalletLabel = u.fullName.isEmpty
+          ? 'Wallet ${u.walletId}'
+          : '${u.fullName} · Wallet ${u.walletId}';
+      _externalHits = [];
+    });
+  }
+
   Future<void> _submit() async {
     final actor = AuthScope.of(context).user;
     if (actor == null || !actor.canManageUsers) {
@@ -235,14 +320,17 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
       );
       return;
     }
-    final byWalletId = !actor.isSuperAdmin && _walletIdInput.isNotEmpty;
+    final byWalletId = !actor.isSuperAdmin &&
+        _walletIdInput.isNotEmpty &&
+        _resolvedForWalletId != null &&
+        _resolvedForWalletId == _walletIdInput;
     if (!byWalletId && _selected == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             actor.isSuperAdmin
                 ? 'Select a user to fund.'
-                : 'Select a user, or enter a Wallet ID.',
+                : 'Select a user, or search and pick an external by name / Wallet ID.',
           ),
         ),
       );
@@ -488,29 +576,48 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                   ),
                   const SizedBox(height: 20),
                   if (!isSuperAdmin) ...[
-                    const Text('External wallets (Wallet ID only)', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const Text('External wallets', style: TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
                     const Text(
-                      'External customers never appear in the list below. Enter their Wallet ID — you will only see their name and Wallet ID (no email or phone search).',
+                      'Search by name or Wallet ID. You will only see their name and Wallet ID '
+                      '(no email, phone, or balances).',
                       style: TextStyle(fontSize: 12, color: EcColors.muted, height: 1.35),
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _walletIdCtrl,
                       textCapitalization: TextCapitalization.none,
-                      onChanged: (_) {
-                        if (_walletIdCtrl.text.trim().isNotEmpty && _selected != null) {
-                          setState(() => _selected = null);
-                        } else {
-                          setState(() {});
-                        }
-                        _resolveWalletId();
-                      },
-                      decoration: const InputDecoration(
-                        hintText: 'Paste Wallet ID',
-                        prefixIcon: Icon(Icons.qr_code_2_outlined),
+                      onChanged: _onExternalQueryChanged,
+                      decoration: InputDecoration(
+                        hintText: 'Name or Wallet ID',
+                        prefixIcon: const Icon(Icons.qr_code_2_outlined),
+                        suffixIcon: _searchingExternals || _resolvingWallet
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              )
+                            : null,
                       ),
                     ),
+                    if (_externalHits.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      ..._externalHits.map((u) {
+                        final label = u.fullName.isEmpty
+                            ? 'Wallet ${u.walletId}'
+                            : '${u.fullName} · Wallet ${u.walletId}';
+                        return ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.account_balance_wallet_outlined, size: 20),
+                          title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          onTap: () => _selectExternalHit(u),
+                        );
+                      }),
+                    ],
                     if (_walletIdInput.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Container(
@@ -522,7 +629,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                         ),
                         child: _resolvingWallet
                             ? const Text(
-                                'Looking up Wallet ID…',
+                                'Looking up…',
                                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                               )
                             : Text(

@@ -73,6 +73,92 @@ if ($action === 'resolve_wallet') {
     exit;
 }
 
+if ($action === 'search_external') {
+    // Admin: name or Wallet ID only (no email/phone/id). SA: full fields.
+    if ($sessionRole < 2) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Admin access required']);
+        exit;
+    }
+    $q = trim((string) ($data['q'] ?? ''));
+    if ($q === '' || mb_strlen($q) < 1) {
+        echo json_encode(['success' => true, 'users' => []]);
+        $mysqli->close();
+        exit;
+    }
+    $like = '%' . $q . '%';
+    $isSa = $sessionRole >= 3;
+    if ($isSa) {
+        $sql = "SELECT id, full_name, email, phone, role,
+                       COALESCE(is_external, 0) AS is_external,
+                       COALESCE(wallet_id, '') AS wallet_id,
+                       COALESCE(momo_balance, 0) AS momo_balance,
+                       COALESCE(vtu_balance, 0) AS vtu_balance,
+                       COALESCE(logical_balance, 0) AS logical_balance
+                FROM users
+                WHERE COALESCE(is_external, 0) = 1 AND role < 3
+                  AND (full_name LIKE ? OR wallet_id LIKE ? OR email LIKE ? OR phone LIKE ?)
+                ORDER BY full_name ASC LIMIT 40";
+        $stmt = $mysqli->prepare($sql);
+        if (!$stmt) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Database error']);
+            exit;
+        }
+        $stmt->bind_param('ssss', $like, $like, $like, $like);
+    } else {
+        $sql = "SELECT full_name, COALESCE(wallet_id, '') AS wallet_id
+                FROM users
+                WHERE COALESCE(is_external, 0) = 1 AND role < 3
+                  AND (full_name LIKE ? OR wallet_id LIKE ?)
+                ORDER BY full_name ASC LIMIT 40";
+        $stmt = $mysqli->prepare($sql);
+        if (!$stmt) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Database error']);
+            exit;
+        }
+        $stmt->bind_param('ss', $like, $like);
+    }
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $users = [];
+    while ($row = $res->fetch_assoc()) {
+        $fullName = (string) ($row['full_name'] ?? '');
+        $walletId = trim((string) ($row['wallet_id'] ?? ''));
+        if ($walletId === '') {
+            continue;
+        }
+        if ($isSa) {
+            $users[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'full_name' => $fullName,
+                'email' => (string) ($row['email'] ?? ''),
+                'phone' => (string) ($row['phone'] ?? ''),
+                'role' => (int) ($row['role'] ?? 0),
+                'is_external' => true,
+                'wallet_id' => $walletId,
+                'momo_balance' => (float) ($row['momo_balance'] ?? 0),
+                'vtu_balance' => (float) ($row['vtu_balance'] ?? 0),
+                'logical_balance' => (float) ($row['logical_balance'] ?? 0),
+                'display_name' => user_external_display_label($fullName, $walletId),
+            ];
+        } else {
+            // Admin: name + Wallet ID only — never id/email/phone/balances.
+            $users[] = [
+                'full_name' => $fullName,
+                'wallet_id' => $walletId,
+                'is_external' => true,
+                'display_name' => user_external_display_label($fullName, $walletId),
+            ];
+        }
+    }
+    $stmt->close();
+    echo json_encode(['success' => true, 'users' => $users]);
+    $mysqli->close();
+    exit;
+}
+
 // Resolve target for fund: Admin must use wallet_id alone for externals.
 $walletIdIn = user_normalize_wallet_id((string) ($data['wallet_id'] ?? ''));
 $id = isset($data['id']) ? (int) $data['id'] : 0;

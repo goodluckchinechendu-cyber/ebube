@@ -93,6 +93,12 @@ $status = trim((string) (
     ?? ($payload['data']['transaction']['status'] ?? '')
     ?? ''
 ));
+$customerReference = trim((string) (
+    $payload['customer_reference']
+    ?? $data['customer_reference']
+    ?? $txn['customer_reference']
+    ?? ''
+));
 
 // Some providers nest final status only under data / transaction blobs.
 if ($status === '' && isset($data['transaction']) && is_array($data['transaction'])) {
@@ -133,6 +139,18 @@ $info = smobile_vtu_status_info($payload, null, $reference !== '');
 $class = $info['class'];
 $holdNote = null;
 if ($reference !== '') {
+    // Timeout cases leave a PEND-* hold; re-key via customer_reference when present.
+    if ($customerReference !== '') {
+        $pending = vtu_hold_find_by_client_request($mysqli, $customerReference);
+        if ($pending && str_starts_with(trim((string) ($pending['reference'] ?? '')), 'PEND-')) {
+            $receiptId = 'VTU-' . preg_replace('/[^A-Za-z0-9\-]/', '', $reference);
+            if (strlen($receiptId) > 64) {
+                $receiptId = 'VTU-' . substr(hash('sha256', $reference), 0, 40);
+            }
+            vtu_hold_rekey($mysqli, (string) $pending['reference'], $reference, $receiptId);
+        }
+    }
+
     if ($info['success']) {
         $holdNote = vtu_hold_complete($mysqli, $reference) ? 'hold_completed' : 'hold_complete_skipped';
     } elseif ($info['failed']) {

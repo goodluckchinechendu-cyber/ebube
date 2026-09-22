@@ -116,13 +116,19 @@ class _WalletTransferScreenState extends State<WalletTransferScreen> {
 
     setState(() => _submitting = true);
     try {
-      final data = await _api.post('wallet_transfer.php', body: {
+      final body = <String, dynamic>{
         'action': 'transfer',
-        'to_user_id': selected.id,
         'amount': amount,
         'wallet_product': _product,
         'client_request_id': 'wt-${DateTime.now().millisecondsSinceEpoch}',
-      });
+      };
+      // Externals for non-SA: transfer by Wallet ID only (id is never exposed).
+      if (selected.isExternal && selected.walletId.isNotEmpty && selected.id <= 0) {
+        body['to_wallet_id'] = selected.walletId;
+      } else {
+        body['to_user_id'] = selected.id;
+      }
+      final data = await _api.post('wallet_transfer.php', body: body);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${data['message'] ?? 'Transfer completed'}')),
@@ -144,6 +150,7 @@ class _WalletTransferScreenState extends State<WalletTransferScreen> {
   @override
   Widget build(BuildContext context) {
     final user = AuthScope.of(context).user;
+    final isSuperAdmin = user?.isSuperAdmin == true;
     final available = _available();
 
     return Scaffold(
@@ -167,10 +174,11 @@ class _WalletTransferScreenState extends State<WalletTransferScreen> {
                     'MoMo ${_money.format(user?.momoBalance ?? 0)} · '
                     'Logical ${_money.format(user?.logicalBalance ?? 0)}'),
                 const SizedBox(height: 8),
-                const Text(
-                  'Transfer from your wallet to accounts registered under you '
-                  '(Admins can also transfer to other Admins).',
-                  style: TextStyle(fontSize: 12, color: EcColors.muted, height: 1.35),
+                Text(
+                  isSuperAdmin
+                      ? 'Transfer to any internal or external account. Externals show full details for Super Admin.'
+                      : 'Transfer to accounts under you, other Admins, or externals (search by name or Wallet ID — name and Wallet ID only).',
+                  style: const TextStyle(fontSize: 12, color: EcColors.muted, height: 1.35),
                 ),
               ],
             ),
@@ -206,7 +214,9 @@ class _WalletTransferScreenState extends State<WalletTransferScreen> {
             onChanged: _onSearchChanged,
             decoration: InputDecoration(
               labelText: 'Find recipient',
-              hintText: 'Search name, email, or phone',
+              hintText: isSuperAdmin
+                  ? 'Search name, email, phone, or Wallet ID'
+                  : 'Search name, email, phone, or Wallet ID',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: _searching
                   ? const Padding(
@@ -230,19 +240,32 @@ class _WalletTransferScreenState extends State<WalletTransferScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                'Selected: ${_selected!.fullName} · ${_selected!.roleLabel}',
+                _selected!.isExternal
+                    ? (isSuperAdmin
+                        ? 'Selected: ${_selected!.fullName} · Wallet ${_selected!.walletId}'
+                            '${_selected!.email.isNotEmpty ? ' · ${_selected!.email}' : ''}'
+                        : 'Selected: ${_selected!.fullName} · Wallet ${_selected!.walletId}')
+                    : 'Selected: ${_selected!.fullName} · ${_selected!.roleLabel}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
           ],
           const SizedBox(height: 12),
           ..._recipients.map((r) {
-            final isSel = _selected?.id == r.id;
+            final isSel = r.isExternal
+                ? (_selected?.walletId == r.walletId && r.walletId.isNotEmpty)
+                : (_selected?.id == r.id && r.id > 0);
+            final subtitle = r.isExternal
+                ? (isSuperAdmin
+                    ? 'External · Wallet ${r.walletId}'
+                        '${r.email.isNotEmpty ? ' · ${r.email}' : ''}'
+                    : 'External · Wallet ${r.walletId}')
+                : '${r.roleLabel} · ${r.email}';
             return ListTile(
               contentPadding: EdgeInsets.zero,
               selected: isSel,
               title: Text(r.fullName, style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text('${r.roleLabel} · ${r.email}'),
+              subtitle: Text(subtitle),
               trailing: isSel ? const Icon(Icons.check_circle, color: EcColors.primary) : null,
               onTap: () => setState(() => _selected = r),
             );
@@ -271,12 +294,16 @@ class _Recipient {
     required this.fullName,
     required this.email,
     required this.roleLabel,
+    this.isExternal = false,
+    this.walletId = '',
   });
 
   final int id;
   final String fullName;
   final String email;
   final String roleLabel;
+  final bool isExternal;
+  final String walletId;
 
   factory _Recipient.fromJson(Map<String, dynamic> json) {
     return _Recipient(
@@ -284,6 +311,8 @@ class _Recipient {
       fullName: '${json['full_name'] ?? ''}',
       email: '${json['email'] ?? ''}',
       roleLabel: '${json['role_label'] ?? ''}',
+      isExternal: json['is_external'] == true || json['is_external'] == 1,
+      walletId: '${json['wallet_id'] ?? ''}'.trim(),
     );
   }
 }

@@ -40,6 +40,7 @@ function wt_fetch_user(mysqli $mysqli, int $id): ?array
         'SELECT id, full_name, email, phone, role,
                 COALESCE(registered_by, 0) AS registered_by,
                 COALESCE(is_external, 0) AS is_external,
+                COALESCE(wallet_id, \'\') AS wallet_id,
                 COALESCE(momo_balance, 0) AS momo_balance,
                 COALESCE(vtu_balance, 0) AS vtu_balance,
                 COALESCE(logical_balance, 0) AS logical_balance
@@ -81,8 +82,8 @@ if ($action === 'recipients') {
     if ($q !== '' && mb_strlen($q) >= 1) {
         $like = '%' . $mysqli->real_escape_string($q) . '%';
         // Scope by role to keep lists small.
-                    if ($sessionRole >= 3) {
-            // Super Admin may find anyone (incl. externals by wallet_id).
+        if ($sessionRole >= 3) {
+            // Super Admin may find anyone (incl. externals by name / wallet_id).
             $sql = "SELECT id, full_name, email, phone, role, COALESCE(registered_by, 0) AS registered_by,
                            COALESCE(is_external, 0) AS is_external,
                            COALESCE(wallet_id, '') AS wallet_id,
@@ -96,7 +97,7 @@ if ($action === 'recipients') {
             $stmt = $mysqli->prepare($sql);
             $stmt->bind_param('issss', $sessionId, $like, $like, $like, $like);
         } elseif ($sessionRole === 2) {
-            // Admin: never externals — they fund those via Wallet ID on Fund Wallet only.
+            // Admin internals (name/email/phone) + externals (name or Wallet ID only).
             $sql = "SELECT id, full_name, email, phone, role, COALESCE(registered_by, 0) AS registered_by,
                            0 AS is_external, '' AS wallet_id,
                            COALESCE(vtu_balance,0) AS vtu_balance,
@@ -147,12 +148,13 @@ if ($action === 'recipients') {
                     'momo' => (float) $row['momo_balance'],
                     'logical' => (float) $row['logical_balance'],
                 ];
-                // Externals (SA-only search hits): expose name + wallet id, not email/phone.
+                // Externals (SA search): expose full fields for SA only.
                 if ($isExt && $sessionRole >= 3) {
-                    $entry['email'] = '';
-                    $entry['phone'] = '';
+                    $entry['email'] = (string) ($row['email'] ?? '');
+                    $entry['phone'] = (string) ($row['phone'] ?? '');
                     $entry['wallet_id'] = (string) ($row['wallet_id'] ?? '');
                     $entry['is_external'] = true;
+                    $entry['role_label'] = 'External';
                 } else {
                     $entry['email'] = (string) $row['email'];
                     $entry['phone'] = (string) $row['phone'];
@@ -160,6 +162,52 @@ if ($action === 'recipients') {
                 $recipients[] = $entry;
             }
             $stmt->close();
+        }
+
+        // Admin: also search externals by name or Wallet ID (name + wallet only in response).
+        if ($sessionRole === 2) {
+            $extSql = "SELECT id, full_name, role, COALESCE(registered_by, 0) AS registered_by,
+                              COALESCE(is_external, 0) AS is_external,
+                              COALESCE(wallet_id, '') AS wallet_id
+                       FROM users
+                       WHERE COALESCE(is_external, 0) = 1 AND role < 3
+                         AND (full_name LIKE ? OR wallet_id LIKE ?)
+                       ORDER BY full_name ASC LIMIT 40";
+            $extStmt = $mysqli->prepare($extSql);
+            if ($extStmt) {
+                $extStmt->bind_param('ss', $like, $like);
+                $extStmt->execute();
+                $extRes = $extStmt->get_result();
+                $from = wt_fetch_user($mysqli, $sessionId) ?? $sessionUser;
+                $from['id'] = $sessionId;
+                $from['role'] = $sessionRole;
+                while ($row = $extRes->fetch_assoc()) {
+                    if (!user_can_wallet_transfer_to($from, $row)) {
+                        continue;
+                    }
+                    $walletId = trim((string) ($row['wallet_id'] ?? ''));
+                    if ($walletId === '') {
+                        continue;
+                    }
+                    $fullName = (string) ($row['full_name'] ?? '');
+                    // Never expose numeric id / email / phone / balances to Admin.
+                    $recipients[] = [
+                        'id' => 0,
+                        'full_name' => $fullName,
+                        'email' => '',
+                        'phone' => '',
+                        'role' => (int) ($row['role'] ?? 0),
+                        'role_label' => 'External',
+                        'wallet_id' => $walletId,
+                        'is_external' => true,
+                        'display_name' => user_external_display_label($fullName, $walletId),
+                        'vtu' => 0,
+                        'momo' => 0,
+                        'logical' => 0,
+                    ];
+                }
+                $extStmt->close();
+            }
         }
     }
 
@@ -170,16 +218,44 @@ if ($action === 'recipients') {
 
 if ($action === 'transfer') {
     $toUserId = (int) ($data['to_user_id'] ?? 0);
+    $toWalletIdIn = function_exists('user_normalize_wallet_id')
+        ? user_normalize_wallet_id((string) ($data['to_wallet_id'] ?? $data['wallet_id'] ?? ''))
+        : strtoupper(trim((string) ($data['to_wallet_id'] ?? $data['wallet_id'] ?? '')));
     $amount = (float) ($data['amount'] ?? 0);
     $productId = strtolower(trim((string) ($data['wallet_product'] ?? $data['product'] ?? 'vtu')));
     $note = trim((string) ($data['note'] ?? ''));
     $clientRequestId = trim((string) ($data['client_request_id'] ?? ''));
+    $transferredViaWalletId = false;
 
     if (!isset($walletLabels[$productId])) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Invalid wallet type']);
         exit;
     }
+
+    // Admin/SA may target an external by Wallet ID (Admin never sends numeric id for externals).
+    if ($toWalletIdIn !== '' && $toUserId <= 0) {
+        $find = $mysqli->prepare(
+            'SELECT id, COALESCE(is_external, 0) AS is_external
+             FROM users WHERE UPPER(TRIM(wallet_id)) = UPPER(?) LIMIT 1'
+        );
+        if ($find) {
+            $find->bind_param('s', $toWalletIdIn);
+            $find->execute();
+            $found = $find->get_result()->fetch_assoc();
+            $find->close();
+            if ($found && (int) ($found['is_external'] ?? 0) === 1) {
+                $toUserId = (int) $found['id'];
+                $transferredViaWalletId = true;
+            }
+        }
+        if ($toUserId <= 0) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Wallet ID not found']);
+            exit;
+        }
+    }
+
     if ($toUserId <= 0 || $toUserId === $sessionId) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Select a valid recipient']);
@@ -198,10 +274,19 @@ if ($action === 'transfer') {
         echo json_encode(['success' => false, 'message' => 'User not found']);
         exit;
     }
-    if ($sessionRole < 3 && (int) ($to['is_external'] ?? 0) === 1) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'message' => 'User not found']);
-        exit;
+    $toIsExternal = (int) ($to['is_external'] ?? 0) === 1;
+    $toWalletId = trim((string) ($to['wallet_id'] ?? ''));
+    // Non-SA must address externals via Wallet ID (never by numeric id alone).
+    if ($sessionRole < 3 && $toIsExternal) {
+        if (
+            !$transferredViaWalletId
+            || $toWalletIdIn === ''
+            || strtoupper($toWalletIdIn) !== strtoupper($toWalletId)
+        ) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'User not found']);
+            exit;
+        }
     }
     if (!user_can_wallet_transfer_to($from, $to)) {
         http_response_code(403);

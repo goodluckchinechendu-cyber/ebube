@@ -164,14 +164,22 @@ class _BuyAirtimeScreenState extends State<BuyAirtimeScreen> {
     } catch (e) {
       if (mounted) {
         final msg = '$e';
+        final lower = msg.toLowerCase();
+        final uncertain = lower.contains('timeout') ||
+            lower.contains('timed out') ||
+            lower.contains('uncertain') ||
+            lower.contains('do not buy again') ||
+            lower.contains('no confirmed response');
         await showVtuPurchaseResult(
           context,
           res: VtuResponse(
             success: false,
             message: msg.contains('Session') || msg.contains('sign in')
                 ? '$msg Please log out and sign in again.'
-                : msg,
-            status: 'failed',
+                : uncertain
+                    ? 'No confirmed response yet. Do not retry — open Transactions; delivery may still complete.'
+                    : msg,
+            status: uncertain ? 'uncertain' : 'failed',
           ),
           productLabel: 'MTN Airtime',
           phone: _phoneCtrl.text.trim(),

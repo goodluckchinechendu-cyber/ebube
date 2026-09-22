@@ -136,8 +136,8 @@ function smobile_vtu_request(string $method, string $path, ?array $jsonBody = nu
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST => strtoupper($method),
         CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_TIMEOUT => 60,
-        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_CONNECTTIMEOUT => 20,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS => 3,
     ];
@@ -154,12 +154,22 @@ function smobile_vtu_request(string $method, string $path, ?array $jsonBody = nu
     curl_close($ch);
 
     if ($errno !== 0) {
+        // Timeout / network drop after the request may already be accepted by SMobile.
+        // Callers must NOT treat this as a confirmed failure when a debit already happened.
+        $timedOut = ($errno === CURLE_OPERATION_TIMEDOUT)
+            || stripos($error, 'timed out') !== false
+            || stripos($error, 'timeout') !== false;
         return [
-            'http_code' => 502,
+            'http_code' => 504,
             'body' => [
-                'response_code' => 502,
+                'response_code' => 504,
                 'success' => false,
-                'message' => 'VTU provider unreachable: ' . $error,
+                'status' => 'processing',
+                'provider_unreachable' => true,
+                'provider_timeout' => $timedOut,
+                'message' => $timedOut
+                    ? 'Provider is taking longer than usual. Do not retry — check Transactions; delivery may still complete.'
+                    : ('VTU provider unreachable: ' . $error),
             ],
             'raw' => '',
         ];
@@ -251,12 +261,14 @@ function smobile_vtu_classify_status(
     $processing = [
         'processing', 'pending', 'queued', 'queue', 'in_progress', 'inprogress', 'progress',
         'awaiting', 'initiated', 'submitted', 'accepted', 'received', 'ongoing', 'waiting',
-        'started', 'running', 'open', 'active', 'process',
+        'started', 'running', 'open', 'active', 'process', 'timeout', 'timed_out', 'uncertain',
     ];
     $failed = [
         'failed', 'failure', 'fail', 'reversed', 'cancelled', 'canceled', 'error', 'errored',
-        'declined', 'rejected', 'timeout', 'timed_out', 'expired', 'abort', 'aborted',
+        'declined', 'rejected', 'expired', 'abort', 'aborted',
     ];
+    // Note: provider "timeout" / "timed_out" are treated as processing — SMobile often
+    // still delivers after a slow acknowledgement.
 
     if (in_array($s, $success, true)) {
         return 'success';
@@ -271,6 +283,10 @@ function smobile_vtu_classify_status(
     if ($s === '') {
         if ($successFlag === true) {
             return 'success';
+        }
+        // Gateway / provider silence: treat as processing — SMobile may still deliver.
+        if (in_array($httpCode, [502, 503, 504], true)) {
+            return 'processing';
         }
         // Explicit provider failure must win over "has a reference" — many failed
         // purchases still return a reference with success:false and no status.
@@ -302,6 +318,13 @@ function smobile_vtu_status_info(array $body, ?int $httpCode = null, bool $hasRe
         $hasReference = $ref !== '';
     }
     $class = smobile_vtu_classify_status($raw, $flag, $httpCode, $hasReference);
+    // curl timeout / unreachable after a debit must never be treated as confirmed failure.
+    if (
+        !empty($body['provider_timeout'])
+        || !empty($body['provider_unreachable'])
+    ) {
+        $class = 'processing';
+    }
     return [
         'raw' => $raw,
         'class' => $class,
