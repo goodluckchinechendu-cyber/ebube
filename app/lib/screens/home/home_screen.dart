@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../config/theme.dart';
-import '../../services/api_client.dart';
 import '../../state/auth_controller.dart';
 import '../../widgets/recent_transactions_section.dart';
+import '../../widgets/register_customer_dialog.dart';
 import '../shell/main_shell.dart';
 import '../vtu/buy_airtime_screen.dart';
 import '../vtu/buy_data_screen.dart';
@@ -313,69 +313,7 @@ class HomeScreen extends StatelessWidget {
   }
 
   void _showRegisterCustomerDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final messenger = ScaffoldMessenger.of(context);
-    final userId = AuthScope.of(context).user?.id ?? 0;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Register Customer'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Customer Full Name *'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: phoneCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone Number *'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final name = nameCtrl.text.trim();
-              final phone = phoneCtrl.text.trim();
-              Navigator.pop(ctx);
-              if (name.isEmpty || phone.isEmpty) {
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('Name and phone are required.')),
-                );
-                return;
-              }
-              try {
-                final api = ApiClient();
-                await api.post('/customers.php', body: {
-                  'action': 'create',
-                  'registered_by_user_id': userId,
-                  'full_name': name,
-                  'phone': phone,
-                  'gender': 'Male',
-                });
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('Customer registered successfully.')),
-                );
-              } catch (e) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text('Failed to save customer: $e')),
-                );
-              }
-            },
-            child: const Text('Save Customer'),
-          ),
-        ],
-      ),
-    );
+    showRegisterCustomerDialog(context);
   }
 }
 

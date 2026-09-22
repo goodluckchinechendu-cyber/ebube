@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../services/api_client.dart';
 import '../../state/auth_controller.dart';
+import '../../widgets/register_customer_dialog.dart';
 
 class CustomerItem {
   const CustomerItem({
@@ -56,6 +57,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _api.close();
     super.dispose();
   }
 
@@ -100,103 +102,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }).toList();
   }
 
-  void _showAddDialog() {
-    final nameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final addressCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    String gender = 'Male';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDlgState) => AlertDialog(
-          title: const Text('Register Customer'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Full Name *'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Phone Number *'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: addressCtrl,
-                  decoration: const InputDecoration(labelText: 'Address / City'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email (Optional)'),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: gender,
-                  decoration: const InputDecoration(labelText: 'Gender'),
-                  items: const [
-                    DropdownMenuItem(value: 'Male', child: Text('Male')),
-                    DropdownMenuItem(value: 'Female', child: Text('Female')),
-                  ],
-                  onChanged: (v) => setDlgState(() => gender = v ?? 'Male'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                final phone = phoneCtrl.text.trim();
-                final address = addressCtrl.text.trim();
-                final email = emailCtrl.text.trim();
-
-                if (name.isEmpty || phone.isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('Name and phone are required.')),
-                  );
-                  return;
-                }
-                final messenger = ScaffoldMessenger.of(context);
-                final userId = AuthScope.of(context).user?.id ?? 0;
-                Navigator.pop(ctx);
-                try {
-                  await _api.post('/customers.php', body: {
-                    'action': 'create',
-                    'registered_by_user_id': userId,
-                    'full_name': name,
-                    'phone': phone,
-                    'address': address,
-                    'email': email,
-                    'gender': gender,
-                  });
-                  messenger.showSnackBar(
-                    const SnackBar(content: Text('Customer registered successfully.')),
-                  );
-                  _load();
-                } catch (e) {
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('Failed to save customer: $e')),
-                  );
-                }
-              },
-              child: const Text('Save Customer'),
-            ),
-          ],
-        ),
-      ),
-    );
+  Future<void> _showAddDialog() async {
+    final ok = await showRegisterCustomerDialog(context);
+    if (ok && mounted) _load();
   }
 
   @override
@@ -280,7 +188,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 const SizedBox(height: 12),
                                 const Text(
                                   'No customers registered yet',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: EcColors.muted),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: EcColors.muted,
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
                                 FilledButton.icon(
@@ -303,8 +215,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   leading: CircleAvatar(
                                     backgroundColor: EcColors.primary.withValues(alpha: 0.15),
                                     child: Text(
-                                      item.fullName.isNotEmpty ? item.fullName[0].toUpperCase() : 'C',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, color: EcColors.ink),
+                                      item.fullName.isNotEmpty
+                                          ? item.fullName[0].toUpperCase()
+                                          : 'C',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: EcColors.ink,
+                                      ),
                                     ),
                                   ),
                                   title: Text(
