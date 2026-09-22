@@ -28,7 +28,7 @@ class VtuService {
       throwOnFailure: false,
     );
 
-    final plans = extractPlanMaps(data);
+    final plans = extractPlanMaps(data, network: network);
     final failed = data['success'] == false;
     if (failed && plans.isEmpty) {
       throw ApiException(

@@ -230,50 +230,39 @@ function smobile_resolve_plan_price(string $planId, ?string $network = null): ?a
     }
 
     $result = smobile_vtu_request('GET', '/v1/plans', null, $query);
-    $body = $result['body'] ?? [];
-    $lists = [];
-    if (isset($body['plans']) && is_array($body['plans'])) {
-        $lists[] = $body['plans'];
-    }
-    if (isset($body['plan_list']) && is_array($body['plan_list'])) {
-        $lists[] = $body['plan_list'];
-    }
-    if (isset($body['data']) && is_array($body['data'])) {
-        $lists[] = $body['data'];
-    }
+    $body = is_array($result['body'] ?? null) ? $result['body'] : [];
+    $plans = smobile_vtu_flatten_plans($body, $network);
 
-    foreach ($lists as $plans) {
-        foreach ($plans as $plan) {
-            if (!is_array($plan)) {
-                continue;
-            }
-            $id = trim((string) ($plan['plan_id'] ?? $plan['id'] ?? $plan['planId'] ?? ''));
-            if ($id === '' || strcasecmp($id, $planId) !== 0) {
-                continue;
-            }
-            $amountRaw = $plan['amount']
-                ?? $plan['price']
-                ?? $plan['plan_amount']
-                ?? $plan['selling_price']
-                ?? $plan['amount_naira']
-                ?? null;
-            if ($amountRaw === null) {
-                return null;
-            }
-            $amount = (float) $amountRaw;
-            $name = trim((string) (
-                $plan['name']
-                ?? $plan['plan_name']
-                ?? $plan['label']
-                ?? $plan['data']
-                ?? $plan['description']
-                ?? $planId
-            ));
-            return [
-                'amount' => $amount,
-                'name' => $name !== '' ? $name : $planId,
-            ];
+    foreach ($plans as $plan) {
+        if (!is_array($plan)) {
+            continue;
         }
+        $id = trim((string) ($plan['plan_id'] ?? $plan['id'] ?? $plan['planId'] ?? ''));
+        if ($id === '' || strcasecmp($id, $planId) !== 0) {
+            continue;
+        }
+        $amountRaw = $plan['amount']
+            ?? $plan['price']
+            ?? $plan['plan_amount']
+            ?? $plan['selling_price']
+            ?? $plan['amount_naira']
+            ?? null;
+        if ($amountRaw === null) {
+            return null;
+        }
+        $amount = (float) $amountRaw;
+        $name = trim((string) (
+            $plan['name']
+            ?? $plan['plan_name']
+            ?? $plan['label']
+            ?? $plan['data']
+            ?? $plan['description']
+            ?? $planId
+        ));
+        return [
+            'amount' => $amount,
+            'name' => $name !== '' ? $name : $planId,
+        ];
     }
 
     return null;

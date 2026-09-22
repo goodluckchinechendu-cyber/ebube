@@ -308,3 +308,113 @@ function smobile_vtu_status_info(array $body, ?int $httpCode = null, bool $hasRe
         'failed' => $class === 'failed',
     ];
 }
+
+/**
+ * Flatten SMobile plans payload into a list of plan maps.
+ * Handles flat `plan_list`, list `plans`, and network-keyed object `plans`.
+ *
+ * @return list<array<string,mixed>>
+ */
+function smobile_vtu_flatten_plans(array $body, ?string $network = null, ?string $networkId = null): array
+{
+    $out = [];
+
+    $appendList = static function ($raw) use (&$out): void {
+        if (!is_array($raw)) {
+            return;
+        }
+        // List of plans
+        $isList = array_is_list($raw) || (isset($raw[0]) && is_array($raw[0]));
+        if ($isList) {
+            foreach ($raw as $plan) {
+                if (is_array($plan)) {
+                    $out[] = $plan;
+                }
+            }
+            return;
+        }
+        // Network-keyed: {"1":[...], "2":[...]}
+        foreach ($raw as $plans) {
+            if (!is_array($plans)) {
+                continue;
+            }
+            foreach ($plans as $plan) {
+                if (is_array($plan)) {
+                    $out[] = $plan;
+                }
+            }
+        }
+    };
+
+    if (isset($body['plan_list']) && is_array($body['plan_list'])) {
+        $appendList($body['plan_list']);
+    } elseif (isset($body['plans']) && is_array($body['plans'])) {
+        $appendList($body['plans']);
+    } elseif (isset($body['data']) && is_array($body['data'])) {
+        $data = $body['data'];
+        if (isset($data['plan_list']) && is_array($data['plan_list'])) {
+            $appendList($data['plan_list']);
+        } elseif (isset($data['plans']) && is_array($data['plans'])) {
+            $appendList($data['plans']);
+        } else {
+            $appendList($data);
+        }
+    }
+
+    // Normalize id field so plan_id is always present.
+    foreach ($out as $i => $plan) {
+        if (!isset($plan['plan_id']) || trim((string) $plan['plan_id']) === '') {
+            $id = $plan['id'] ?? $plan['planId'] ?? null;
+            if ($id !== null && trim((string) $id) !== '') {
+                $out[$i]['plan_id'] = (string) $id;
+            }
+        }
+    }
+
+    $wantId = null;
+    if ($networkId !== null && $networkId !== '') {
+        $wantId = (string) $networkId;
+    } elseif ($network !== null && $network !== '') {
+        $normalized = smobile_vtu_normalize_network($network);
+        if (is_int($normalized)) {
+            $wantId = (string) $normalized;
+        } elseif (is_string($normalized)) {
+            $map = ['MTN' => '1', 'Airtel' => '2', 'GLO' => '3', '9mobile' => '4'];
+            $wantId = $map[$normalized] ?? null;
+        }
+    }
+
+    if ($wantId === null || $out === []) {
+        return array_values($out);
+    }
+
+    $filtered = [];
+    foreach ($out as $plan) {
+        $pid = trim((string) ($plan['network_id'] ?? $plan['networkId'] ?? $plan['network'] ?? ''));
+        if ($pid === '') {
+            // Plans from network-keyed maps often omit network_id; keep them when
+            // the upstream request already scoped by network.
+            $filtered[] = $plan;
+            continue;
+        }
+        if (ctype_digit($pid)) {
+            if ($pid === $wantId) {
+                $filtered[] = $plan;
+            }
+            continue;
+        }
+        $norm = smobile_vtu_normalize_network($pid);
+        $map = ['MTN' => '1', 'Airtel' => '2', 'GLO' => '3', '9mobile' => '4'];
+        $asId = '';
+        if (is_int($norm)) {
+            $asId = (string) $norm;
+        } elseif (is_string($norm) && isset($map[$norm])) {
+            $asId = $map[$norm];
+        }
+        if ($asId === $wantId) {
+            $filtered[] = $plan;
+        }
+    }
+
+    return $filtered !== [] ? array_values($filtered) : array_values($out);
+}

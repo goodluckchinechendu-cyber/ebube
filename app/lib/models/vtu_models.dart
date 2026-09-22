@@ -310,20 +310,83 @@ double? _moneyOrNull(dynamic v) {
   return _money(v);
 }
 
-/// Pull a plan list out of common response shapes.
-List<Map<String, dynamic>> extractPlanMaps(Map<String, dynamic> data) {
-  dynamic raw = data['plans'] ?? data['plan_list'];
-  if (raw == null && data['data'] is List) {
-    raw = data['data'];
-  }
-  if (raw == null && data['data'] is Map) {
-    final nested = Map<String, dynamic>.from(data['data'] as Map);
-    raw = nested['plans'] ?? nested['plan_list'] ?? nested['data'];
-  }
-  if (raw is! List) return const [];
+/// Pull a plan list out of common SMobile response shapes.
+///
+/// Live API returns either:
+/// - `plan_list`: flat List of plan maps
+/// - `plans`: Map keyed by network id → List of plans  (NOT a List)
+List<Map<String, dynamic>> extractPlanMaps(
+  Map<String, dynamic> data, {
+  Network? network,
+}) {
+  final collected = <Map<String, dynamic>>[];
 
-  return raw
-      .whereType<Map>()
-      .map((e) => Map<String, dynamic>.from(e))
-      .toList();
+  void addList(dynamic raw) {
+    if (raw is! List) return;
+    for (final e in raw) {
+      if (e is Map) collected.add(Map<String, dynamic>.from(e));
+    }
+  }
+
+  void addNetworkKeyedMap(dynamic raw) {
+    if (raw is! Map) return;
+    final asMap = Map<String, dynamic>.from(raw);
+    if (network != null) {
+      final preferredKeys = <String>{
+        '${network.id}',
+        network.apiName,
+        network.label,
+        network.apiName.toLowerCase(),
+        network.label.toLowerCase(),
+      };
+      for (final key in asMap.keys) {
+        if (preferredKeys.contains('$key') ||
+            preferredKeys.contains('$key'.toLowerCase())) {
+          addList(asMap[key]);
+        }
+      }
+      if (collected.isNotEmpty) return;
+    }
+    for (final value in asMap.values) {
+      addList(value);
+    }
+  }
+
+  if (data['plan_list'] is List) {
+    addList(data['plan_list']);
+  } else if (data['plans'] is List) {
+    addList(data['plans']);
+  } else if (data['plans'] is Map) {
+    addNetworkKeyedMap(data['plans']);
+  }
+
+  if (collected.isEmpty && data['data'] is List) {
+    addList(data['data']);
+  }
+  if (collected.isEmpty && data['data'] is Map) {
+    final nested = Map<String, dynamic>.from(data['data'] as Map);
+    if (nested['plan_list'] is List) {
+      addList(nested['plan_list']);
+    } else if (nested['plans'] is List) {
+      addList(nested['plans']);
+    } else if (nested['plans'] is Map) {
+      addNetworkKeyedMap(nested['plans']);
+    } else {
+      addList(nested['data']);
+    }
+  }
+
+  if (network == null || collected.isEmpty) return collected;
+
+  final filtered = collected.where((p) {
+    final idRaw = p['network_id'] ?? p['networkId'] ?? p['network'];
+    if (idRaw == null) return true;
+    final id = idRaw is num ? idRaw.toInt() : int.tryParse('$idRaw'.trim());
+    if (id != null) return id == network.id;
+    final name = '$idRaw'.trim().toLowerCase();
+    return name == network.apiName.toLowerCase() ||
+        name == network.label.toLowerCase();
+  }).toList();
+
+  return filtered.isNotEmpty ? filtered : collected;
 }

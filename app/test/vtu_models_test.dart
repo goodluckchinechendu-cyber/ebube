@@ -110,5 +110,37 @@ void main() {
       expect(DataPlan.fromJson(plans.first).id, '9');
       expect(DataPlan.fromJson(plans.first).price, 150);
     });
+
+    test('reads network-keyed plans object', () {
+      final plans = extractPlanMaps({
+        'success': true,
+        'plans': {
+          '1': [
+            {'id': '20000', 'name': '75MB', 'price': 73},
+          ],
+          '2': [
+            {'id': '30000', 'name': 'Airtel 1GB', 'price': 100},
+          ],
+        },
+      }, network: Network.mtn);
+      expect(plans.length, 1);
+      expect(DataPlan.fromJson(plans.first).id, '20000');
+      expect(DataPlan.fromJson(plans.first).price, 73);
+    });
+
+    test('prefers flat plan_list over keyed plans', () {
+      final plans = extractPlanMaps({
+        'plans': {
+          '1': [
+            {'id': 'x', 'name': 'ignore', 'price': 1},
+          ],
+        },
+        'plan_list': [
+          {'network_id': '1', 'plan_id': '20002', 'name': '1GB', 'price': 488},
+        ],
+      }, network: Network.mtn);
+      expect(plans.length, 1);
+      expect(plans.first['plan_id'], '20002');
+    });
   });
 }
