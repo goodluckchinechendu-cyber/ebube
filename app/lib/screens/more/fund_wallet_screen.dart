@@ -24,9 +24,11 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
   bool _loadingPool = false;
   bool _funding = false;
   bool _resolvingWallet = false;
+  int _resolveWalletSeq = 0;
   String? _error;
   String? _resolvedWalletLabel;
   String? _resolvedWalletName;
+  String? _resolvedForWalletId;
   List<_FundUser> _users = [];
   _FundUser? _selected;
   String _product = 'vtu';
@@ -177,10 +179,12 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
 
   Future<void> _resolveWalletId() async {
     final wid = _walletIdInput;
+    final seq = ++_resolveWalletSeq;
     if (wid.isEmpty) {
       setState(() {
         _resolvedWalletLabel = null;
         _resolvedWalletName = null;
+        _resolvedForWalletId = null;
         _resolvingWallet = false;
       });
       return;
@@ -192,9 +196,10 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
         body: {'action': 'resolve_wallet', 'wallet_id': wid},
         throwOnFailure: false,
       );
-      if (!mounted) return;
+      if (!mounted || seq != _resolveWalletSeq) return;
       if (res['success'] == true) {
         setState(() {
+          _resolvedForWalletId = wid;
           _resolvedWalletName = '${res['full_name'] ?? ''}'.trim();
           _resolvedWalletLabel = '${res['display_name'] ?? ''}'.trim();
           if (_resolvedWalletLabel == null || _resolvedWalletLabel!.isEmpty) {
@@ -205,14 +210,16 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
         });
       } else {
         setState(() {
+          _resolvedForWalletId = null;
           _resolvedWalletName = null;
           _resolvedWalletLabel = null;
           _resolvingWallet = false;
         });
       }
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || seq != _resolveWalletSeq) return;
       setState(() {
+        _resolvedForWalletId = null;
         _resolvedWalletName = null;
         _resolvedWalletLabel = null;
         _resolvingWallet = false;
@@ -265,12 +272,13 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
     }
 
     final productLabel = _products.firstWhere((p) => p.$1 == _product).$2;
+    final resolvedMatches = byWalletId &&
+        _resolvedForWalletId != null &&
+        _resolvedForWalletId == _walletIdInput;
     final targetLabel = byWalletId
-        ? (_resolvedWalletLabel?.isNotEmpty == true
+        ? (resolvedMatches && _resolvedWalletLabel?.isNotEmpty == true
             ? _resolvedWalletLabel!
-            : (_resolvedWalletName?.isNotEmpty == true
-                ? '$_resolvedWalletName · Wallet $_walletIdInput'
-                : 'Wallet ID $_walletIdInput'))
+            : 'Wallet ID $_walletIdInput')
         : _selected!.fullName;
     final ok = await showDialog<bool>(
       context: context,
@@ -518,7 +526,8 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                               )
                             : Text(
-                                _resolvedWalletLabel?.isNotEmpty == true
+                                (_resolvedForWalletId == _walletIdInput &&
+                                        _resolvedWalletLabel?.isNotEmpty == true)
                                     ? 'Will transfer to: $_resolvedWalletLabel'
                                     : 'Will transfer to Wallet ID: $_walletIdInput',
                                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),

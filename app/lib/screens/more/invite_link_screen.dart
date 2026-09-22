@@ -32,16 +32,22 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool quiet = false}) async {
+    if (!quiet) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    } else {
+      setState(() => _error = null);
+    }
     try {
       final vis = _registerAsExternal ? 'ext' : 'int';
       final isSa = AuthScope.of(context).user?.isSuperAdmin == true;
-      final path = isSa ? 'invite_link.php?visibility=$vis' : 'invite_link.php';
-      final data = await _api.get(path);
+      final data = await _api.get(
+        'invite_link.php',
+        query: isSa ? {'visibility': vis} : null,
+      );
       if (!mounted) return;
       setState(() {
         _url = '${data['invite_url'] ?? ''}';
@@ -67,7 +73,7 @@ class _InviteLinkScreenState extends State<InviteLinkScreen> {
   Future<void> _onVisibilityChanged(bool external) async {
     if (!_isSuperAdmin) return;
     setState(() => _registerAsExternal = external);
-    await _load();
+    await _load(quiet: true);
   }
 
   Future<void> _copy() async {
