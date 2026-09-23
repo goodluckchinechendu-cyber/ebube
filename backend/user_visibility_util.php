@@ -5,12 +5,10 @@
  * Rules:
  * - Super Admin: sees everyone in Manage Users; can set internal/external; sees wallet IDs.
  * - Super Admin invite / Register Customer defaults to external (optional internal).
- * - Admin: never see external users in Manage Users, fund-user lists, or peer-transfer
- *   search. Externals are reachable only by exact Wallet ID on Fund Wallet.
- * - When Admin resolves/funds an external Wallet ID, response/UI may show only
- *   full name + Wallet ID (no email, phone, numeric user id, or visibility label).
- * - When funding/history involves an external wallet by ID, Admin may see
- *   the account name together with the Wallet ID (no Internal/External label).
+ * - Admin: never see external users in Manage Users. Externals are reachable by
+ *   name or Wallet ID on Fund Wallet / Transfer. Histories (transactions, transfers,
+ *   funding) include externals for Admin, but only name + Wallet ID is shown.
+ * - Super Admin: full details for externals on histories and Manage Users.
  *
  * Wallet IDs intentionally vary in length and pattern so they do not look like
  * sequential product codes from one system.
@@ -69,7 +67,128 @@ function ensure_user_visibility_columns(mysqli $mysqli): ?string
         $wid->free();
     }
 
+    // Who granted Admin + whether this Admin may create further Admins.
+    $ag = $mysqli->query("SHOW COLUMNS FROM `users` LIKE 'admin_granted_by'");
+    if ($ag && $ag->num_rows === 0) {
+        if (!$mysqli->query(
+            "ALTER TABLE `users`
+             ADD COLUMN `admin_granted_by` INT UNSIGNED NULL DEFAULT NULL AFTER `role`,
+             ADD KEY `idx_users_admin_granted_by` (`admin_granted_by`)"
+        )) {
+            return $mysqli->error ?: 'Could not add admin_granted_by';
+        }
+    }
+    if ($ag) {
+        $ag->free();
+    }
+
+    $cca = $mysqli->query("SHOW COLUMNS FROM `users` LIKE 'can_create_admins'");
+    if ($cca && $cca->num_rows === 0) {
+        // NULL = legacy Admin (treat as allowed). 1 = SA-granted. 0 = Admin-granted.
+        if (!$mysqli->query(
+            "ALTER TABLE `users`
+             ADD COLUMN `can_create_admins` TINYINT UNSIGNED NULL DEFAULT NULL AFTER `admin_granted_by`"
+        )) {
+            return $mysqli->error ?: 'Could not add can_create_admins';
+        }
+    }
+    if ($cca) {
+        $cca->free();
+    }
+
     return null;
+}
+
+/**
+ * Whether this actor may assign the Admin (role 2) role.
+ * Super Admin: yes.
+ * Admin: only if can_create_admins is NULL (legacy) or 1 (granted by Super Admin).
+ * Admins created by another Admin get can_create_admins = 0.
+ */
+function user_can_assign_admin_role(mysqli $mysqli, int $actorId, int $actorRole): bool
+{
+    if ($actorRole >= 3) {
+        return true;
+    }
+    if ($actorRole !== 2 || $actorId <= 0) {
+        return false;
+    }
+
+    ensure_user_visibility_columns($mysqli);
+
+    $stmt = $mysqli->prepare(
+        'SELECT can_create_admins, COALESCE(admin_granted_by, 0) AS admin_granted_by
+         FROM users WHERE id = ? LIMIT 1'
+    );
+    if (!$stmt) {
+        return false;
+    }
+    $stmt->bind_param('i', $actorId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$row) {
+        return false;
+    }
+
+    // Explicit flag set at promotion time (preferred).
+    if (array_key_exists('can_create_admins', $row) && $row['can_create_admins'] !== null) {
+        return (int) $row['can_create_admins'] === 1;
+    }
+
+    // Legacy Admins (flag unset): allow unless we can prove they were Admin-made.
+    $grantedBy = (int) ($row['admin_granted_by'] ?? 0);
+    if ($grantedBy <= 0) {
+        return true;
+    }
+
+    $gStmt = $mysqli->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
+    if (!$gStmt) {
+        // Granter missing — treat as allowed (likely old SA account removed).
+        return true;
+    }
+    $gStmt->bind_param('i', $grantedBy);
+    $gStmt->execute();
+    $gRow = $gStmt->get_result()->fetch_assoc();
+    $gStmt->close();
+    if (!$gRow) {
+        return true;
+    }
+    $granterRole = (int) ($gRow['role'] ?? 0);
+    // Deny only when granter is clearly still an Admin (Admin-made chain).
+    if ($granterRole === 2) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Persist who granted Admin when promoting; clear when leaving Admin role.
+ */
+function user_set_admin_granted_by(mysqli $mysqli, int $userId, int $newRole, int $actorId, int $actorRole = 0): void
+{
+    ensure_user_visibility_columns($mysqli);
+    if ($newRole === 2) {
+        // SA-granted Admins may create Admins; Admin-granted may not.
+        $canCreate = ($actorRole >= 3) ? 1 : 0;
+        $stmt = $mysqli->prepare(
+            'UPDATE users SET admin_granted_by = ?, can_create_admins = ? WHERE id = ?'
+        );
+        if ($stmt) {
+            $stmt->bind_param('iii', $actorId, $canCreate, $userId);
+            $stmt->execute();
+            $stmt->close();
+        }
+        return;
+    }
+    $stmt = $mysqli->prepare(
+        'UPDATE users SET admin_granted_by = NULL, can_create_admins = NULL WHERE id = ?'
+    );
+    if ($stmt) {
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $stmt->close();
+    }
 }
 
 /**

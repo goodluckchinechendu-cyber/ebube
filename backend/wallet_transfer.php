@@ -412,12 +412,10 @@ if ($action === 'history') {
     $types = '';
 
     if ($scope === 'all' && $sessionRole >= 2) {
-        // Admin+: all transfers not involving Super Admin accounts as parties when Admin.
-        // Also hide any transfer involving an external account from Admin view.
+        // Admin+: all transfers among non–Super Admin accounts (incl. externals).
+        // Externals are masked to name + Wallet ID for Admin in the row mapper below.
         if ($sessionRole === 2) {
-            $where = ' WHERE fu.role < 3 AND tu.role < 3
-                       AND COALESCE(fu.is_external, 0) = 0
-                       AND COALESCE(tu.is_external, 0) = 0';
+            $where = ' WHERE fu.role < 3 AND tu.role < 3';
         } else {
             $where = '';
         }
@@ -431,12 +429,15 @@ if ($action === 'history') {
     if ($q !== '') {
         $like = '%' . $q . '%';
         $where .= ($where === '' ? ' WHERE' : ' AND') .
-            ' (fu.full_name LIKE ? OR tu.full_name LIKE ? OR t.reference LIKE ? OR t.status LIKE ?)';
+            ' (fu.full_name LIKE ? OR tu.full_name LIKE ? OR t.reference LIKE ? OR t.status LIKE ?
+               OR fu.wallet_id LIKE ? OR tu.wallet_id LIKE ?)';
         $params[] = $like;
         $params[] = $like;
         $params[] = $like;
         $params[] = $like;
-        $types .= 'ssss';
+        $params[] = $like;
+        $params[] = $like;
+        $types .= 'ssssss';
     }
 
     $fetchLimit = $perPage + 1;
@@ -496,12 +497,14 @@ if ($action === 'history') {
                     (string) ($row['from_user_name'] ?? ''),
                     (string) ($row['from_wallet_id'] ?? '')
                 );
+                $row['from_user_id'] = 0;
             }
             if ((int) ($row['to_is_external'] ?? 0) === 1) {
                 $row['to_user_name'] = user_external_display_label(
                     (string) ($row['to_user_name'] ?? ''),
                     (string) ($row['to_wallet_id'] ?? '')
                 );
+                $row['to_user_id'] = 0;
             }
         }
         $product = (string) $row['wallet_product'];

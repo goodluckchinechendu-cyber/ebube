@@ -21,6 +21,8 @@ class TransactionItem {
     required this.transactionAt,
     this.phone = '',
     this.network = 'MTN',
+    this.accountLabel = '',
+    this.isExternalAccount = false,
   });
 
   final int id;
@@ -34,6 +36,8 @@ class TransactionItem {
   final DateTime transactionAt;
   final String phone;
   final String network;
+  final String accountLabel;
+  final bool isExternalAccount;
 
   factory TransactionItem.fromJson(Map<String, dynamic> json) {
     double money(dynamic v) => (v is num) ? v.toDouble() : double.tryParse('$v') ?? 0;
@@ -60,25 +64,40 @@ class TransactionItem {
       customerName: '${json['customer_name'] ?? 'Walk-in Customer'}',
       product: product,
       qty: (json['qty'] as num?)?.toInt() ?? 1,
-      total: money(json['total']),
+      total: money(json['total'] ?? json['amount']),
       status: '${json['status'] ?? 'Completed'}',
-      servedBy: '${json['served_by'] ?? 'Agent'}',
-      transactionAt: parseDate(json['transaction_at'] ?? json['created_at']),
+      servedBy: '${json['served_by'] ?? json['funded_by'] ?? 'Agent'}',
+      transactionAt: parseDate(json['transaction_at'] ?? json['created_at'] ?? json['funded_at']),
       phone: '${json['phone'] ?? ''}',
       network: network,
+      accountLabel: '${json['account_label'] ?? ''}'.trim(),
+      isExternalAccount: json['is_external_account'] == true || json['is_external_account'] == 1,
     );
   }
 
   bool get isAirtime => product.toLowerCase().contains('airtime');
   bool get isData => product.toLowerCase().contains('data');
   bool get isWalletFunding =>
-      product.toLowerCase().contains('wallet') || product.toLowerCase().contains('fund');
+      product.toLowerCase().contains('wallet') ||
+      product.toLowerCase().contains('fund');
 
   String get productBadge {
     if (isAirtime) return 'Airtime';
     if (isData) return 'Data';
     if (isWalletFunding) return 'Funding';
     return 'Txn';
+  }
+
+  String get subtitlePrimary {
+    if (accountLabel.isNotEmpty) {
+      if (phone.isNotEmpty && !isWalletFunding) {
+        return '$accountLabel · $phone';
+      }
+      return accountLabel;
+    }
+    if (isExternalAccount && customerName.isNotEmpty) return customerName;
+    if (phone.isNotEmpty) return phone;
+    return customerName;
   }
 }
 
@@ -156,6 +175,36 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       final list = (res['transactions'] as List? ?? [])
           .map((e) => TransactionItem.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
+
+      // Admin+ All Transactions also includes wallet fund history.
+      if (widget.allAccounts && user?.canManageUsers == true) {
+        try {
+          final fundRes = await _api.post('/wallet_funding.php', body: {
+            'action': 'list',
+            'admin': true,
+          }, throwOnFailure: false);
+          final funding = (fundRes['funding'] as List? ?? [])
+              .whereType<Map>()
+              .map((e) {
+                final m = Map<String, dynamic>.from(e);
+                // Shape funding rows like purchase transactions for the list UI.
+                m['product'] = m['product'] ?? m['wallet_name'] ?? 'Wallet Funding';
+                m['phone'] = '';
+                m['network'] = 'MTN';
+                m['account_label'] = m['customer_name'] ?? '';
+                if (m['is_external_account'] == true || m['is_external_account'] == 1) {
+                  m['account_label'] = m['customer_name'] ?? '';
+                }
+                return TransactionItem.fromJson(m);
+              })
+              .toList();
+          list.addAll(funding);
+          list.sort((a, b) => b.transactionAt.compareTo(a.transactionAt));
+        } catch (_) {
+          // Purchases still show if funding history fails.
+        }
+      }
+
       if (mounted) {
         setState(() {
           _all = list;
@@ -178,9 +227,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return _all.where((t) {
       return t.receiptId.toLowerCase().contains(q) ||
           t.customerName.toLowerCase().contains(q) ||
+          t.accountLabel.toLowerCase().contains(q) ||
           t.product.toLowerCase().contains(q) ||
           t.phone.toLowerCase().contains(q) ||
-          t.status.toLowerCase().contains(q);
+          t.status.toLowerCase().contains(q) ||
+          t.servedBy.toLowerCase().contains(q);
     }).toList();
   }
 
@@ -209,7 +260,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final dateFormat = DateFormat('MMM dd, yyyy • hh:mm a');
 
     final subtitle = widget.allAccounts
-        ? 'Admin, agents & customers'
+        ? 'Purchases & funding · externals show as name + Wallet ID for Admin'
         : 'Your transactions';
 
     return Scaffold(
@@ -344,7 +395,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                     ],
                                   ),
                                   subtitle: Text(
-                                    '${item.phone.isNotEmpty ? item.phone : item.customerName} • ${dateFormat.format(item.transactionAt)}',
+                                    '${item.subtitlePrimary} • ${dateFormat.format(item.transactionAt)}',
                                     style: const TextStyle(fontSize: 12, color: EcColors.muted),
                                   ),
                                   trailing: Column(

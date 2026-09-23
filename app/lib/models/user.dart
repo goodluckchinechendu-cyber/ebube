@@ -18,6 +18,7 @@ class AgentUser {
     this.hasTransactionPin = false,
     this.isExternal = false,
     this.walletId = '',
+    this.canAssignAdmin = false,
   });
 
   final int id;
@@ -39,6 +40,8 @@ class AgentUser {
   /// Own-account / Super-Admin metadata. Never shown to Admin as a label for others.
   final bool isExternal;
   final String walletId;
+  /// Admin promoted by Super Admin (or legacy) may assign Admin; Admin-made Admins may not.
+  final bool canAssignAdmin;
 
   // Role constants
   static const int roleCustomer = 0;
@@ -76,6 +79,9 @@ class AgentUser {
       return const [roleCustomer, roleAgent, roleAdmin, roleSuperAdmin];
     }
     if (isAdmin) {
+      if (canAssignAdmin) {
+        return const [roleCustomer, roleAgent, roleAdmin];
+      }
       return const [roleCustomer, roleAgent];
     }
     return const [];
@@ -85,7 +91,7 @@ class AgentUser {
   bool canEditUserRole(AgentUser target) {
     if (isSuperAdmin) return true;
     if (isAdmin) {
-      // Admin may only edit customers and agents (not other admins / super admins).
+      // Admin may edit customers and agents (promote to Admin if allowed); not other admins / SA.
       return target.role <= roleAgent;
     }
     return false;
@@ -118,6 +124,18 @@ class AgentUser {
       return defaultValue;
     }
 
+    final role = number(json['role']);
+    // Prefer server flag. If key is missing (old cached session), Admins default to
+    // true so legacy SA-seeded Admins keep the UI; server still enforces.
+    final bool canAssign;
+    if (role >= roleSuperAdmin) {
+      canAssign = true;
+    } else if (json.containsKey('can_assign_admin')) {
+      canAssign = flag(json['can_assign_admin']);
+    } else {
+      canAssign = role == roleAdmin;
+    }
+
     return AgentUser(
       id: number(json['id']),
       fullName: '${json['full_name'] ?? ''}',
@@ -125,7 +143,7 @@ class AgentUser {
       phone: '${json['phone'] ?? ''}',
       location: '${json['location'] ?? ''}',
       gender: '${json['gender'] ?? ''}',
-      role: number(json['role']),
+      role: role,
       accountName: '${json['account_name'] ?? ''}',
       bankName: '${json['bank_name'] ?? ''}',
       accountNumber: '${json['account_number'] ?? ''}',
@@ -137,6 +155,7 @@ class AgentUser {
       hasTransactionPin: flag(json['has_transaction_pin']),
       isExternal: flag(json['is_external']),
       walletId: '${json['wallet_id'] ?? ''}'.trim(),
+      canAssignAdmin: canAssign,
     );
   }
 
@@ -158,6 +177,7 @@ class AgentUser {
       'commission_balance': commissionBalance,
       'email_verified': emailVerified,
       'has_transaction_pin': hasTransactionPin,
+      'can_assign_admin': canAssignAdmin,
     };
     // Never persist visibility labels for non–Super Admin sessions.
     if (isSuperAdmin) {
@@ -178,6 +198,7 @@ class AgentUser {
     bool? emailVerified,
     bool? isExternal,
     String? walletId,
+    bool? canAssignAdmin,
   }) {
     return AgentUser(
       id: id,
@@ -198,6 +219,7 @@ class AgentUser {
       hasTransactionPin: hasTransactionPin ?? this.hasTransactionPin,
       isExternal: isExternal ?? this.isExternal,
       walletId: walletId ?? this.walletId,
+      canAssignAdmin: canAssignAdmin ?? this.canAssignAdmin,
     );
   }
 }

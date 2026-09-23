@@ -93,7 +93,9 @@ function funding_row_to_array(array $row, int $viewerRole = 3): array
     }
 
     $customerName = (string) ($row['user_name'] ?? '');
-    if ($viewerRole < 3 && (int) ($row['wallet_is_external'] ?? 0) === 1) {
+    $walletUserId = (int) ($row['wallet_user_id'] ?? 0);
+    $isExternal = (int) ($row['wallet_is_external'] ?? 0) === 1;
+    if ($viewerRole < 3 && $isExternal) {
         $wid = trim((string) ($row['wallet_wallet_id'] ?? ''));
         // Avoid double-masking rows that already stored "Name · Wallet ID".
         if ($wid !== '' && preg_match('/\s·\sWallet\s+' . preg_quote($wid, '/') . '$/i', $customerName)) {
@@ -103,12 +105,14 @@ function funding_row_to_array(array $row, int $viewerRole = 3): array
         } else {
             $customerName = user_external_display_label($customerName, $wid);
         }
+        $walletUserId = 0;
     }
 
     return [
         'receipt_id' => $row['receipt_id'],
-        'wallet_user_id' => (int) $row['wallet_user_id'],
+        'wallet_user_id' => $walletUserId,
         'customer_name' => $customerName,
+        'is_external_account' => $isExternal,
         'product' => $row['wallet_name'],
         'wallet_product' => $row['wallet_product'],
         'qty' => 1,
@@ -133,13 +137,9 @@ if ($action === 'list') {
             exit;
         }
         if ($sessionRole === 2) {
-            // Internals always; own external Wallet-ID fundings (redacted in row mapper).
+            // Admin: all non–SA fundings (internals + externals). Externals redacted in mapper.
             $sql = WALLET_FUNDING_SELECT .
                 ' WHERE COALESCE(wu.role, 0) < 3
-                    AND (
-                      COALESCE(wu.is_external, 0) = 0
-                      OR h.funded_by_user_id = ' . (int) $sessionId . '
-                    )
                   ORDER BY h.funded_at DESC';
         } else {
             $sql = WALLET_FUNDING_SELECT . ' ORDER BY h.funded_at DESC';
@@ -167,7 +167,8 @@ if ($action === 'list') {
             $targetStmt->execute();
             $targetRow = $targetStmt->get_result()->fetch_assoc();
             $targetStmt->close();
-            if (!$targetRow || (int) ($targetRow['role'] ?? 99) >= 3 || (int) ($targetRow['is_external'] ?? 0) === 1) {
+            // Admin may view funding for any non–SA account (externals masked in mapper).
+            if (!$targetRow || (int) ($targetRow['role'] ?? 99) >= 3) {
                 http_response_code(404);
                 echo json_encode(['success' => false, 'message' => 'User not found']);
                 exit;

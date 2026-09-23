@@ -125,6 +125,14 @@ try {
         }
     }
 
+    require_once __DIR__ . '/user_visibility_util.php';
+    ensure_user_visibility_columns($mysqli);
+    $user['can_assign_admin'] = user_can_assign_admin_role(
+        $mysqli,
+        (int) $user['id'],
+        (int) ($user['role'] ?? 0)
+    );
+
     echo json_encode([
         'success' => true,
         'message' => 'Login successful',

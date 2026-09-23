@@ -110,5 +110,19 @@ function login_user_payload(array $user): array
         $payload['wallet_id'] = $walletId;
     }
 
+    // Admin UI: whether this Admin may promote others to Admin.
+    if ($role >= 3) {
+        $payload['can_assign_admin'] = true;
+    } elseif ($role === 2) {
+        if (array_key_exists('can_assign_admin', $user)) {
+            $payload['can_assign_admin'] = (bool) $user['can_assign_admin'];
+        } elseif (array_key_exists('can_create_admins', $user) && $user['can_create_admins'] !== null) {
+            $payload['can_assign_admin'] = (int) $user['can_create_admins'] === 1;
+        } else {
+            // Legacy row without flag: allow (server still re-checks on assign).
+            $payload['can_assign_admin'] = true;
+        }
+    }
+
     return $payload + user_payout_from_row($user);
 }

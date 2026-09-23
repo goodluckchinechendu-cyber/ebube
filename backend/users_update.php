@@ -65,7 +65,7 @@ function fetch_user_role_and_external(mysqli $mysqli, int $userId): ?array
 
 /**
  * Super Admin: anyone.
- * Admin: only Customers (0) and Agents (1).
+ * Admin: Customers (0) and Agents (1) — can promote them to Admin only if allowed.
  */
 function actor_can_edit_target(int $actorRole, int $targetRole): bool
 {
@@ -78,12 +78,15 @@ function actor_can_edit_target(int $actorRole, int $targetRole): bool
     return false;
 }
 
-function actor_can_assign_role(int $actorRole, int $newRole): bool
+function actor_can_assign_role(mysqli $mysqli, int $actorId, int $actorRole, int $newRole): bool
 {
     if ($actorRole >= 3) {
         return in_array($newRole, [0, 1, 2, 3], true);
     }
     if ($actorRole === 2) {
+        if ($newRole === 2) {
+            return user_can_assign_admin_role($mysqli, $actorId, $actorRole);
+        }
         return in_array($newRole, [0, 1], true);
     }
     return false;
@@ -231,11 +234,15 @@ if ($action === 'set_role') {
         ]);
         exit;
     }
-    if (!actor_can_assign_role($sessionRole, $role)) {
+    if (!actor_can_assign_role($mysqli, $sessionId, $sessionRole, $role)) {
         http_response_code(403);
         echo json_encode([
             'success' => false,
-            'message' => 'Admin can only assign Customer or Agent roles',
+            'message' => $sessionRole >= 3
+                ? 'Invalid role assignment'
+                : ($role === 2
+                    ? 'Only Super Admin (or Admins created by Super Admin) can assign the Admin role'
+                    : 'Admin can assign Customer or Agent roles'),
         ]);
         exit;
     }
@@ -244,6 +251,9 @@ if ($action === 'set_role') {
     $stmt->bind_param('ii', $role, $id);
 
     if ($stmt->execute()) {
+        if ($role !== $targetRole) {
+            user_set_admin_granted_by($mysqli, $id, $role, $sessionId, $sessionRole);
+        }
         echo json_encode([
             'success' => true,
             'message' => 'Role updated to ' . ($roleNames[$role] ?? (string) $role),
@@ -310,11 +320,13 @@ if (!in_array($role, $allowedRoles, true)) {
     $role = $targetRole;
 }
 
-if ($role !== $targetRole && !actor_can_assign_role($sessionRole, $role)) {
+if ($role !== $targetRole && !actor_can_assign_role($mysqli, $sessionId, $sessionRole, $role)) {
     http_response_code(403);
     echo json_encode([
         'success' => false,
-        'message' => 'You cannot assign that role',
+        'message' => $role === 2
+            ? 'Only Super Admin (or Admins created by Super Admin) can assign the Admin role'
+            : 'You cannot assign that role',
     ]);
     exit;
 }
@@ -458,6 +470,9 @@ foreach ($params as $i => $v) {
 call_user_func_array([$stmt, 'bind_param'], $bind);
 
 if ($stmt->execute()) {
+    if ($role !== $targetRole) {
+        user_set_admin_granted_by($mysqli, $id, $role, $sessionId, $sessionRole);
+    }
     echo json_encode([
         'success' => true,
         'message' => 'User updated',

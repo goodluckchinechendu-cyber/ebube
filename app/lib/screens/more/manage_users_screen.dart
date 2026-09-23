@@ -124,7 +124,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     if (!actor.canEditUserRole(target)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Admin can only edit Agents and Customers.'),
+          content: Text('Admin can only edit Agents and Customers (can promote them to Admin).'),
         ),
       );
       return;

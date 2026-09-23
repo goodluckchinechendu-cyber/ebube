@@ -3,6 +3,7 @@ require_once 'config.php';
 require_once 'schema.php';
 require_once __DIR__ . '/session_auth.php';
 require_once __DIR__ . '/wallet_pool.php';
+require_once __DIR__ . '/user_visibility_util.php';
 
 $schemaError = ensure_app_tables($mysqli);
 if ($schemaError !== null) {
@@ -19,18 +20,40 @@ $sessionRole = (int) $sessionUser['role'];
 $data = json_decode(file_get_contents('php://input'), true) ?? [];
 $action = $data['action'] ?? 'list';
 
-function transaction_row_to_array(array $row): array
+function transaction_row_to_array(array $row, int $viewerRole = 3): array
 {
     $phone = trim((string) ($row['phone'] ?? ''));
     $network = trim((string) ($row['network'] ?? ''));
     if ($network === '') {
         $network = 'MTN';
     }
+
+    $walletUserId = (int) ($row['wallet_user_id'] ?? 0);
+    $customerName = (string) ($row['customer_name'] ?? '');
+    $isExternal = (int) ($row['wallet_is_external'] ?? 0) === 1;
+    $walletId = trim((string) ($row['wallet_wallet_id'] ?? ''));
+    $ownerName = trim((string) ($row['wallet_owner_name'] ?? ''));
+    $accountLabel = '';
+
+    if ($isExternal) {
+        $accountLabel = user_external_display_label(
+            $ownerName !== '' ? $ownerName : $customerName,
+            $walletId
+        );
+        // Admin: identify the account as name + Wallet ID only (no numeric id).
+        if ($viewerRole < 3) {
+            $customerName = $accountLabel;
+            $walletUserId = 0;
+        }
+    }
+
     return [
         'receipt_id' => $row['receipt_id'],
-        'wallet_user_id' => (int) $row['wallet_user_id'],
-        'customer_id' => (int) $row['customer_id'],
-        'customer_name' => $row['customer_name'],
+        'wallet_user_id' => $walletUserId,
+        'customer_id' => (int) ($row['customer_id'] ?? 0),
+        'customer_name' => $customerName,
+        'account_label' => $accountLabel,
+        'is_external_account' => $isExternal,
         'phone' => $phone,
         'network' => $network,
         'product' => $row['product'],
@@ -54,9 +77,13 @@ function agent_transactions_select_sql(): string
                      WHEN LOWER(t.status) IN (\'processing\', \'pending\') AND h.status = \'refunded\' THEN \'Failed\'
                      ELSE t.status
                    END AS status,
-                   t.served_by, t.transaction_at
+                   t.served_by, t.transaction_at,
+                   COALESCE(wu.is_external, 0) AS wallet_is_external,
+                   COALESCE(wu.wallet_id, \'\') AS wallet_wallet_id,
+                   COALESCE(wu.full_name, \'\') AS wallet_owner_name
             FROM agent_transactions t
-            LEFT JOIN vtu_wallet_holds h ON h.receipt_id = t.receipt_id';
+            LEFT JOIN vtu_wallet_holds h ON h.receipt_id = t.receipt_id
+            LEFT JOIN users wu ON wu.id = t.wallet_user_id';
 }
 
 /**
@@ -142,7 +169,7 @@ if ($action === 'list') {
     $transactions = [];
     if ($result) {
         while ($row = $result->fetch_assoc()) {
-            $transactions[] = transaction_row_to_array($row);
+            $transactions[] = transaction_row_to_array($row, $sessionRole);
         }
     }
     $stmt->close();
@@ -164,50 +191,28 @@ if ($action === 'list_all') {
 
     $filterUserId = isset($data['user_id']) ? (int) $data['user_id'] : 0;
 
-    if ($sessionRole >= 3) {
-        // Elevated admin: admin / agent / customer (hide own elevated peers if desired — show all non-self optional)
-        if ($filterUserId > 0) {
-            $stmt = $mysqli->prepare(
-                agent_transactions_select_sql() .
-                ' INNER JOIN users u ON u.id = t.wallet_user_id
-                  WHERE u.role < 3 AND t.wallet_user_id = ?
-                  ORDER BY t.transaction_at DESC'
-            );
-            $stmt->bind_param('i', $filterUserId);
-            $stmt->execute();
-            $result = $stmt->get_result();
-        } else {
-            $sql = agent_transactions_select_sql() .
-                ' INNER JOIN users u ON u.id = t.wallet_user_id
-                  WHERE u.role < 3
-                  ORDER BY t.transaction_at DESC';
-            $result = $mysqli->query($sql);
-        }
+    // SA + Admin: all non–Super Admin accounts including externals.
+    // Admin responses mask external identity to name + Wallet ID only.
+    if ($filterUserId > 0) {
+        $stmt = $mysqli->prepare(
+            agent_transactions_select_sql() .
+            ' WHERE COALESCE(wu.role, 0) < 3 AND t.wallet_user_id = ?
+              ORDER BY t.transaction_at DESC'
+        );
+        $stmt->bind_param('i', $filterUserId);
+        $stmt->execute();
+        $result = $stmt->get_result();
     } else {
-        // Admin: other admins, agents, customers — never elevated or external accounts.
-        if ($filterUserId > 0) {
-            $stmt = $mysqli->prepare(
-                agent_transactions_select_sql() .
-                ' INNER JOIN users u ON u.id = t.wallet_user_id
-                  WHERE u.role < 3 AND COALESCE(u.is_external, 0) = 0 AND t.wallet_user_id = ?
-                  ORDER BY t.transaction_at DESC'
-            );
-            $stmt->bind_param('i', $filterUserId);
-            $stmt->execute();
-            $result = $stmt->get_result();
-        } else {
-            $sql = agent_transactions_select_sql() .
-                ' INNER JOIN users u ON u.id = t.wallet_user_id
-                  WHERE u.role < 3 AND COALESCE(u.is_external, 0) = 0
-                  ORDER BY t.transaction_at DESC';
-            $result = $mysqli->query($sql);
-        }
+        $sql = agent_transactions_select_sql() .
+            ' WHERE COALESCE(wu.role, 0) < 3
+              ORDER BY t.transaction_at DESC';
+        $result = $mysqli->query($sql);
     }
 
     $transactions = [];
     if ($result) {
         while ($row = $result->fetch_assoc()) {
-            $transactions[] = transaction_row_to_array($row);
+            $transactions[] = transaction_row_to_array($row, $sessionRole);
         }
     }
     if (isset($stmt)) {
