@@ -14,6 +14,8 @@ cd "$ROOT"
 MODE="${1:-upload}"
 API_BASE="${API_BASE:-https://ebubeconnect.com/backend}"
 VOLUME_NAME="${RAILWAY_APK_VOLUME:-web-downloads-apks}"
+# Prefer volume UUID so `railway volume files` stays non-interactive.
+VOLUME_ID="${RAILWAY_APK_VOLUME_ID:-d9ec194a-91b9-4bdb-9a8f-02da728cdc25}"
 APK_DIR="$ROOT/downloads/apks"
 APK_NAME="EbubeConnect.apk"
 MOUNT_PATH="/var/www/html/downloads/apks"
@@ -121,18 +123,19 @@ upload_apk() {
     exit 1
   fi
 
-  echo "=== Uploading $APK_NAME to volume $VOLUME_NAME ==="
+  echo "=== Uploading $APK_NAME to volume $VOLUME_NAME ($VOLUME_ID) ==="
+  local vol_ref="${VOLUME_ID:-$VOLUME_NAME}"
   local htaccess="$APK_DIR/.htaccess"
   if [[ -f "$htaccess" ]]; then
     echo "  -> /.htaccess (Content-Disposition rules)"
-    railway volume files --volume "$VOLUME_NAME" upload "$htaccess" "/.htaccess" --overwrite
+    railway volume files --volume "$vol_ref" upload "$htaccess" "/.htaccess" --overwrite
   fi
   echo "  -> /$APK_NAME ($(du -h "$APK_DIR/$APK_NAME" | awk '{print $1}'))"
-  railway volume files --volume "$VOLUME_NAME" upload "$APK_DIR/$APK_NAME" "/$APK_NAME" --overwrite
+  railway volume files --volume "$vol_ref" upload "$APK_DIR/$APK_NAME" "/$APK_NAME" --overwrite
 
   # Remove old split APKs from the volume if present.
   for stale in EbubeConnect-arm64.apk EbubeConnect-arm.apk; do
-    railway volume files --volume "$VOLUME_NAME" delete "/$stale" --yes >/dev/null 2>&1 || true
+    railway volume files --volume "$vol_ref" delete "/$stale" --yes >/dev/null 2>&1 || true
   done
 
   echo "Done."

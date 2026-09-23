@@ -183,23 +183,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             'action': 'list',
             'admin': true,
           }, throwOnFailure: false);
-          final funding = (fundRes['funding'] as List? ?? [])
-              .whereType<Map>()
-              .map((e) {
-                final m = Map<String, dynamic>.from(e);
-                // Shape funding rows like purchase transactions for the list UI.
-                m['product'] = m['product'] ?? m['wallet_name'] ?? 'Wallet Funding';
-                m['phone'] = '';
-                m['network'] = 'MTN';
-                m['account_label'] = m['customer_name'] ?? '';
-                if (m['is_external_account'] == true || m['is_external_account'] == 1) {
-                  m['account_label'] = m['customer_name'] ?? '';
-                }
-                return TransactionItem.fromJson(m);
-              })
-              .toList();
-          list.addAll(funding);
-          list.sort((a, b) => b.transactionAt.compareTo(a.transactionAt));
+          if (fundRes['success'] == true) {
+            final funding = (fundRes['funding'] as List? ?? [])
+                .whereType<Map>()
+                .map((e) {
+                  final m = Map<String, dynamic>.from(e);
+                  m['product'] = m['product'] ?? m['wallet_name'] ?? 'Wallet Funding';
+                  m['phone'] = '';
+                  m['network'] = 'MTN';
+                  m['account_label'] = '${m['customer_name'] ?? ''}'.trim();
+                  return TransactionItem.fromJson(m);
+                })
+                .toList();
+            list.addAll(funding);
+            list.sort((a, b) => b.transactionAt.compareTo(a.transactionAt));
+          }
         } catch (_) {
           // Purchases still show if funding history fails.
         }
