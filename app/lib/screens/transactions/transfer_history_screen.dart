@@ -5,6 +5,37 @@ import '../../config/theme.dart';
 import '../../services/api_client.dart';
 import '../../state/auth_controller.dart';
 
+String _displayStatus(String status) {
+  final s = status.trim().toLowerCase();
+  if (s.isEmpty ||
+      s == 'active' ||
+      s == 'funded' ||
+      s == 'completed' ||
+      s == 'success' ||
+      s == 'successful' ||
+      s == 'received') {
+    return 'Received';
+  }
+  return status;
+}
+
+Color _statusColor(String status) {
+  final s = status.trim().toLowerCase();
+  if (s.isEmpty ||
+      s == 'active' ||
+      s == 'funded' ||
+      s == 'completed' ||
+      s == 'success' ||
+      s == 'successful' ||
+      s == 'received') {
+    return Colors.green.shade800;
+  }
+  if (s == 'failed' || s == 'failure' || s == 'refunded' || s == 'cancelled' || s == 'canceled') {
+    return Colors.red.shade800;
+  }
+  return Colors.orange.shade800;
+}
+
 class TransferHistoryScreen extends StatefulWidget {
   const TransferHistoryScreen({super.key});
 
@@ -112,7 +143,7 @@ class _TransferHistoryScreenState extends State<TransferHistoryScreen> {
                             child: ListView.separated(
                               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                               itemCount: _rows.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              separatorBuilder: (_, _) => const SizedBox(height: 8),
                               itemBuilder: (context, i) {
                                 final t = _rows[i];
                                 final Color color;
@@ -155,9 +186,31 @@ class _TransferHistoryScreenState extends State<TransferHistoryScreen> {
                                           ],
                                         ),
                                         const SizedBox(height: 6),
-                                        Text(
-                                          '${t.walletName} · ${t.status} · ${t.when}',
-                                          style: const TextStyle(fontSize: 12, color: EcColors.muted),
+                                        Row(
+                                          children: [
+                                            if (t.walletName.isNotEmpty) ...[
+                                              Text(
+                                                t.walletName,
+                                                style: const TextStyle(fontSize: 12, color: EcColors.muted),
+                                              ),
+                                              const Text(
+                                                ' · ',
+                                                style: TextStyle(fontSize: 12, color: EcColors.muted),
+                                              ),
+                                            ],
+                                            Text(
+                                              _displayStatus(t.status),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: _statusColor(t.status),
+                                              ),
+                                            ),
+                                            Text(
+                                              ' · ${t.when}',
+                                              style: const TextStyle(fontSize: 12, color: EcColors.muted),
+                                            ),
+                                          ],
                                         ),
                                         if (t.reference.isNotEmpty)
                                           Text(

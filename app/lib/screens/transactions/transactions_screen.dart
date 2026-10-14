@@ -103,7 +103,12 @@ class TransactionItem {
 
 Color _statusBg(String status) {
   final s = status.toLowerCase();
-  if (s == 'completed' || s == 'success' || s == 'successful') {
+  if (s == 'completed' ||
+      s == 'success' ||
+      s == 'successful' ||
+      s == 'received' ||
+      s == 'active' ||
+      s == 'funded') {
     return EcColors.success.withValues(alpha: 0.15);
   }
   if (s == 'failed' || s == 'failure' || s == 'refunded' || s == 'cancelled' || s == 'canceled') {
@@ -114,13 +119,32 @@ Color _statusBg(String status) {
 
 Color _statusFg(String status) {
   final s = status.toLowerCase();
-  if (s == 'completed' || s == 'success' || s == 'successful') {
+  if (s == 'completed' ||
+      s == 'success' ||
+      s == 'successful' ||
+      s == 'received' ||
+      s == 'active' ||
+      s == 'funded') {
     return EcColors.success;
   }
   if (s == 'failed' || s == 'failure' || s == 'refunded' || s == 'cancelled' || s == 'canceled') {
     return EcColors.danger;
   }
   return Colors.orange.shade800;
+}
+
+String _displayStatus(String status) {
+  final s = status.trim().toLowerCase();
+  if (s.isEmpty ||
+      s == 'active' ||
+      s == 'funded' ||
+      s == 'completed' ||
+      s == 'success' ||
+      s == 'successful') {
+    return 'Received';
+  }
+  if (s == 'received') return 'Received';
+  return status;
 }
 
 class TransactionsScreen extends StatefulWidget {
@@ -412,7 +436,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(
-                                          item.status,
+                                          _displayStatus(item.status),
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,

@@ -25,6 +25,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
   bool _loadingUsers = false;
   bool _loadingPool = false;
   bool _funding = false;
+  bool _canForce = false;
   bool _resolvingWallet = false;
   int _resolveWalletSeq = 0;
   Timer? _extSearchDebounce;
@@ -72,8 +73,11 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadPool();
       final actor = AuthScope.of(context).user;
+      if (actor?.isSuperAdmin == true) {
+        setState(() => _showSmobilePool = true);
+      }
+      _loadPool();
       if (actor?.canManageUsers == true) {
         _loadUsers();
       }
@@ -92,7 +96,12 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
       );
       if (!mounted) return;
       if (res['success'] != true) {
-        setState(() => _loadingPool = false);
+        setState(() {
+          _loadingPool = false;
+          if (actor.isSuperAdmin) {
+            _canForce = true;
+          }
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${res['message'] ?? 'Could not load wallet status'}')),
         );
@@ -302,6 +311,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
   void _selectExternalHit(_FundUser u) {
     setState(() {
       _selected = null;
+      _canForce = false;
       _walletIdCtrl.text = u.walletId;
       _resolvedForWalletId = u.walletId;
       _resolvedWalletName = u.fullName;
@@ -312,7 +322,7 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
     });
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit({bool force = false}) async {
     final actor = AuthScope.of(context).user;
     if (actor == null || !actor.canManageUsers) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -345,13 +355,17 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
     }
     final available = _availableForProduct;
     final fundingSelf = !actor.isSuperAdmin && !byWalletId && _selected!.id == actor.id;
-    if (!fundingSelf && amount > available + 0.001) {
+    if (!force && !fundingSelf && amount > available + 0.001) {
+      if (actor.isSuperAdmin) {
+        setState(() => _canForce = true);
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             _showSmobilePool
-                ? 'Amount exceeds available pool (${_money.format(available)}). '
-                    'Total funded cannot exceed master wallet.'
+                ? (actor.isSuperAdmin
+                    ? 'Amount exceeds available pool (${_money.format(available)}). You can use "Force Fund" to bypass this check.'
+                    : 'Amount exceeds available pool (${_money.format(available)}). Total funded cannot exceed master wallet.')
                 : 'Amount exceeds your funded balance (${_money.format(available)}) for this wallet.',
           ),
         ),
@@ -372,25 +386,32 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
-          _showSmobilePool
-              ? 'Confirm fund wallet'
-              : (fundingSelf ? 'Confirm top up' : 'Confirm transfer'),
+          force
+              ? 'Confirm Force Fund'
+              : (_showSmobilePool
+                  ? 'Confirm fund wallet'
+                  : (fundingSelf ? 'Confirm top up' : 'Confirm transfer')),
         ),
         content: Text(
-          _showSmobilePool
-              ? 'Add ${_money.format(amount)} to $targetLabel\'s $productLabel wallet?'
-              : fundingSelf
-                  ? 'Top up your $productLabel wallet by ${_money.format(amount)}?'
-                  : 'Transfer ${_money.format(amount)} from your $productLabel balance to $targetLabel?',
+          force
+              ? 'Bypass SMobile pool check and inject ${_money.format(amount)} directly into $targetLabel\'s $productLabel wallet?'
+              : (_showSmobilePool
+                  ? 'Add ${_money.format(amount)} to $targetLabel\'s $productLabel wallet?'
+                  : fundingSelf
+                      ? 'Top up your $productLabel wallet by ${_money.format(amount)}?'
+                      : 'Transfer ${_money.format(amount)} from your $productLabel balance to $targetLabel?'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(
+            style: force ? FilledButton.styleFrom(backgroundColor: EcColors.danger) : null,
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
-              _showSmobilePool
-                  ? 'Fund Wallet'
-                  : (fundingSelf ? 'Top Up' : 'Transfer'),
+              force
+                  ? 'Force Fund'
+                  : (_showSmobilePool
+                      ? 'Fund Wallet'
+                      : (fundingSelf ? 'Top Up' : 'Transfer')),
             ),
           ),
         ],
@@ -402,21 +423,40 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
     final clientRequestId =
         'fund-${DateTime.now().millisecondsSinceEpoch}-${actor.id}-${byWalletId ? _walletIdInput : _selected!.id}';
     try {
-      await _api.post('users_wallet.php', body: {
-        'action': 'fund',
-        if (byWalletId) 'wallet_id': _walletIdInput else 'id': _selected!.id,
-        'actor_id': actor.id,
-        'product_id': _product,
-        'amount': amount,
-        'client_request_id': clientRequestId,
-      });
+      final res = await _api.post(
+        'users_wallet.php',
+        body: {
+          'action': 'fund',
+          if (byWalletId) 'wallet_id': _walletIdInput else 'id': _selected!.id,
+          'actor_id': actor.id,
+          'product_id': _product,
+          'amount': amount,
+          'client_request_id': clientRequestId,
+          if (force) 'force': true,
+        },
+        throwOnFailure: false,
+      );
 
       if (!mounted) return;
+
+      if (res['success'] != true) {
+        final canForce = res['can_force'] == true && actor.isSuperAdmin;
+        setState(() => _canForce = canForce);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${res['message'] ?? 'Funding failed'}'),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+
+      setState(() => _canForce = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             _showSmobilePool
-                ? 'Funded ${_money.format(amount)} $productLabel into $targetLabel.'
+                ? '${force ? "[Force Funded] " : ""}Funded ${_money.format(amount)} $productLabel into $targetLabel.'
                 : 'Transferred ${_money.format(amount)} $productLabel to $targetLabel.',
           ),
         ),
@@ -551,7 +591,10 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                             label: _products[i].$2,
                             icon: _products[i].$3,
                             selected: _product == _products[i].$1,
-                            onTap: () => setState(() => _product = _products[i].$1),
+                            onTap: () => setState(() {
+                              _product = _products[i].$1;
+                              _canForce = false;
+                            }),
                           ),
                         ),
                       ],
@@ -668,8 +711,18 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                       ),
                       child: Text(
                         isSuperAdmin && _selected!.isExternal
-                            ? 'Selected: ${_selected!.fullName} · Wallet ${_selected!.walletId} · VTU ${_money.format(_selected!.vtu)}'
-                            : 'Selected: ${_selected!.fullName} · VTU Airtime ${_money.format(_selected!.vtu)} · MoMo Airtime ${_money.format(_selected!.momo)} · Logical Airtime ${_money.format(_selected!.logical)}',
+                            ? 'Selected: ${_selected!.fullName} · Wallet ${_selected!.walletId}'
+                                '\nVTU ${_money.format(_selected!.vtu)} · MoMo ${_money.format(_selected!.momo)} · Logical ${_money.format(_selected!.logical)}'
+                            : () {
+                                final bal = _product == 'momo'
+                                    ? _selected!.momo
+                                    : _product == 'logical'
+                                        ? _selected!.logical
+                                        : _selected!.vtu;
+                                final walletName = _products.firstWhere((p) => p.$1 == _product).$2;
+                                return 'Selected: ${_selected!.fullName}'
+                                    '\n$walletName balance: ${_money.format(bal)}';
+                              }(),
                         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                       ),
                     ),
@@ -710,12 +763,13 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                                         title: Text(u.fullName, style: const TextStyle(fontWeight: FontWeight.w700)),
                                         subtitle: Text(
                                           isSuperAdmin && u.isExternal
-                                              ? '${u.roleName} · Wallet ${u.walletId}\nVTU ${_money.format(u.vtu)} · MoMo ${_money.format(u.momo)}'
-                                              : '${u.roleName} · ${u.email}\nVTU Airtime ${_money.format(u.vtu)} · MoMo Airtime ${_money.format(u.momo)}',
+                                              ? '${u.roleName} · Wallet ${u.walletId}\nVTU ${_money.format(u.vtu)} · MoMo ${_money.format(u.momo)} · Logical ${_money.format(u.logical)}'
+                                              : '${u.roleName} · ${u.email}\nVTU ${_money.format(u.vtu)} · MoMo ${_money.format(u.momo)} · Logical ${_money.format(u.logical)}',
                                         ),
                                         isThreeLine: true,
                                         onTap: () => setState(() {
                                           _selected = u;
+                                          _canForce = false;
                                           _walletIdCtrl.clear();
                                         }),
                                       );
@@ -734,23 +788,49 @@ class _FundWalletScreenState extends State<FundWalletScreen> {
                 color: Theme.of(context).scaffoldBackgroundColor,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _funding ? null : _submit,
-                      icon: _funding
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: EcColors.ink),
-                            )
-                          : Icon(isSuperAdmin ? Icons.add_card : Icons.swap_horiz),
-                      label: Text(
-                        _funding
-                            ? (isSuperAdmin ? 'Funding…' : 'Transferring…')
-                            : (isSuperAdmin ? 'Fund Wallet' : 'Transfer Balance'),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isSuperAdmin && _canForce) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _funding ? null : () => _submit(force: true),
+                            icon: const Icon(Icons.flash_on, color: EcColors.danger),
+                            label: const Text(
+                              'Force Fund (Bypass SMobile Pool)',
+                              style: TextStyle(
+                                color: EcColors.danger,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: EcColors.danger, width: 1.5),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: _funding ? null : () => _submit(),
+                          icon: _funding
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: EcColors.ink),
+                                )
+                              : Icon(isSuperAdmin ? Icons.add_card : Icons.swap_horiz),
+                          label: Text(
+                            _funding
+                                ? (isSuperAdmin ? 'Funding…' : 'Transferring…')
+                                : (isSuperAdmin ? 'Fund Wallet' : 'Transfer Balance'),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),

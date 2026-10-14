@@ -255,6 +255,8 @@ if ($action === 'fund') {
 
     $productId = (string) ($data['product_id'] ?? '');
     $amount = isset($data['amount']) ? (float) $data['amount'] : 0;
+    // Super Admin override: skip SMobile pool check (e.g. SMobile API temporarily down).
+    $forceInject = $isSuperAdmin && !empty($data['force']);
 
     if ($amount <= 0) {
         http_response_code(400);
@@ -420,7 +422,7 @@ if ($action === 'fund') {
     }
 
     try {
-        if ($needsPoolCapacity) {
+        if ($needsPoolCapacity && !$forceInject) {
             // Capacity = SMobile − (balances + open holds). Funding does not charge SMobile.
             $pool = wallet_pool_snapshot($mysqli);
             if (empty($pool['success'])) {
@@ -428,10 +430,12 @@ if ($action === 'fund') {
                     'Could not verify SMobile wallet capacity|' .
                     json_encode([
                         'smobile_balance' => $pool['smobile_balance'] ?? 0,
-                        'injected_total' => $pool['injected_total'] ?? 0,
-                        'held_total' => $pool['held_total'] ?? 0,
+                        'injected_total'  => $pool['injected_total'] ?? 0,
+                        'held_total'      => $pool['held_total'] ?? 0,
                         'available_to_inject' => $pool['available_to_inject'] ?? 0,
-                        'message' => $pool['message'] ?? 'Could not verify SMobile wallet capacity',
+                        'message' => ($pool['message'] ?? 'Could not verify SMobile wallet capacity')
+                            . ' — tap Force Fund to bypass this check.',
+                        'can_force' => $isSuperAdmin,
                     ])
                 );
             }
@@ -440,11 +444,12 @@ if ($action === 'fund') {
                 throw new RuntimeException(
                     'Amount exceeds available inject capacity (SMobile balance minus already injected wallets)|' .
                     json_encode([
-                        'smobile_balance' => (float) $pool['smobile_balance'],
-                        'injected_total' => (float) $pool['injected_total'],
-                        'held_total' => (float) ($pool['held_total'] ?? 0),
+                        'smobile_balance'     => (float) $pool['smobile_balance'],
+                        'injected_total'      => (float) $pool['injected_total'],
+                        'held_total'          => (float) ($pool['held_total'] ?? 0),
                         'available_to_inject' => $available,
-                        'message' => $isAdminSelfInject
+                        'can_force'           => $isSuperAdmin,
+                        'message'             => $isAdminSelfInject
                             ? 'Not enough wallet capacity to fund your account. Ask your administrator to top up.'
                             : null,
                     ])
@@ -494,7 +499,7 @@ if ($action === 'fund') {
         }
         $fundedBy = trim((string) ($actor['full_name'] ?? 'Admin'));
         $fundedByUserId = $sessionId;
-        $status = 'Active';
+        $status = 'Received';
         $fundedAt = date('Y-m-d H:i:s');
 
         $hist = $mysqli->prepare(

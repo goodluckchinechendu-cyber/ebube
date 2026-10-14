@@ -45,6 +45,22 @@ function wh_external_label(array $row, string $nameKey, string $walletKey, strin
     return $label !== 'Wallet' ? $label : $fallback;
 }
 
+function wh_display_status(?string $value, string $fallback = 'Received'): string
+{
+    $text = trim((string) $value);
+    if (
+        $text === ''
+        || strcasecmp($text, 'Active') === 0
+        || strcasecmp($text, 'Funded') === 0
+        || strcasecmp($text, 'Completed') === 0
+        || strcasecmp($text, 'Success') === 0
+        || strcasecmp($text, 'Successful') === 0
+    ) {
+        return $fallback;
+    }
+    return $text;
+}
+
 // Funding received (credit) — exclude Admin transfer-out mirror rows.
 $stmt = $mysqli->prepare(
     "SELECT id, receipt_id, wallet_product, wallet_name, amount, funded_by, funded_at, status
@@ -69,7 +85,7 @@ if ($stmt) {
             'wallet_product' => (string) $row['wallet_product'],
             'reference' => (string) $row['receipt_id'],
             'performed_by_name' => (string) ($row['funded_by'] ?: 'Administrator'),
-            'status' => (string) ($row['status'] ?? 'Active'),
+            'status' => wh_display_status($row['status'] ?? ''),
             'created_at' => (string) $row['funded_at'],
             'source' => 'Funding',
         ];
@@ -109,7 +125,7 @@ if ($stmt) {
             'wallet_product' => (string) $row['wallet_product'],
             'reference' => (string) $row['receipt_id'],
             'performed_by_name' => 'You',
-            'status' => (string) ($row['status'] ?? 'Active'),
+            'status' => wh_display_status($row['status'] ?? ''),
             'created_at' => (string) $row['funded_at'],
             'source' => 'Fund Wallet',
         ];
@@ -158,7 +174,7 @@ if ($stmt) {
             'wallet_product' => (string) $row['wallet_product'],
             'reference' => (string) $row['reference'],
             'performed_by_name' => $isOut ? 'You' : ($other !== '' ? $other : 'User'),
-            'status' => (string) ($row['status'] ?? 'completed'),
+            'status' => wh_display_status($row['status'] ?? '', 'Received'),
             'created_at' => (string) $row['created_at'],
             'source' => 'Wallet Transfer',
         ];

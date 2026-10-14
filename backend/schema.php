@@ -117,7 +117,7 @@ function ensure_app_tables(mysqli $mysqli): ?string
             `amount` DECIMAL(15, 2) NOT NULL DEFAULT 0,
             `funded_by` VARCHAR(255) NOT NULL DEFAULT '',
             `funded_by_user_id` INT UNSIGNED NULL DEFAULT NULL,
-            `status` VARCHAR(32) NOT NULL DEFAULT 'Active',
+            `status` VARCHAR(32) NOT NULL DEFAULT 'Received',
             `funded_at` DATETIME NOT NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
@@ -281,6 +281,25 @@ function ensure_app_tables(mysqli $mysqli): ?string
             ADD UNIQUE KEY `uniq_funding_client_request` (`client_request_id`)"
         )) {
             return $mysqli->error;
+        }
+    }
+
+    // Rename legacy funding status Active/Funded → Received (display + new default).
+    $mysqli->query(
+        "UPDATE `wallet_funding_history`
+         SET `status` = 'Received'
+         WHERE LOWER(TRIM(`status`)) IN ('active', 'funded', '')"
+    );
+    $fundStatusCol = $mysqli->query("SHOW COLUMNS FROM `wallet_funding_history` LIKE 'status'");
+    if ($fundStatusCol && ($fundStatusRow = $fundStatusCol->fetch_assoc())) {
+        $default = (string) ($fundStatusRow['Default'] ?? '');
+        if (strcasecmp($default, 'Received') !== 0) {
+            if (!$mysqli->query(
+                "ALTER TABLE `wallet_funding_history`
+                 MODIFY COLUMN `status` VARCHAR(32) NOT NULL DEFAULT 'Received'"
+            )) {
+                return $mysqli->error;
+            }
         }
     }
 

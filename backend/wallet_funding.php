@@ -67,8 +67,14 @@ function display_funded_by_from_row(array $row): string
 function normalize_funding_status(?string $value): string
 {
     $text = trim((string) $value);
-    if ($text === '' || strcasecmp($text, 'Funded') === 0) {
-        return 'Active';
+    if (
+        $text === ''
+        || strcasecmp($text, 'Funded') === 0
+        || strcasecmp($text, 'Active') === 0
+        || strcasecmp($text, 'Completed') === 0
+        || strcasecmp($text, 'Success') === 0
+    ) {
+        return 'Received';
     }
     return $text;
 }

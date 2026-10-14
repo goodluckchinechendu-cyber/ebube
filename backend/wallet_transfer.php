@@ -56,6 +56,22 @@ function wt_fetch_user(mysqli $mysqli, int $id): ?array
     return $row ?: null;
 }
 
+function wt_display_status(?string $value): string
+{
+    $text = trim((string) $value);
+    if (
+        $text === ''
+        || strcasecmp($text, 'completed') === 0
+        || strcasecmp($text, 'active') === 0
+        || strcasecmp($text, 'funded') === 0
+        || strcasecmp($text, 'success') === 0
+        || strcasecmp($text, 'successful') === 0
+    ) {
+        return 'Received';
+    }
+    return $text;
+}
+
 function wt_row_to_api(array $row): array
 {
     return [
@@ -68,7 +84,7 @@ function wt_row_to_api(array $row): array
         'wallet_product' => (string) ($row['wallet_product'] ?? 'vtu'),
         'wallet_name' => (string) ($row['wallet_name'] ?? ''),
         'amount' => (float) ($row['amount'] ?? 0),
-        'status' => (string) ($row['status'] ?? 'completed'),
+        'status' => wt_display_status($row['status'] ?? ''),
         'note' => (string) ($row['note'] ?? ''),
         'created_at' => (string) ($row['created_at'] ?? ''),
         'direction' => (string) ($row['direction'] ?? ''),
